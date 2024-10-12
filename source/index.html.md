@@ -18,423 +18,182 @@ includes:
 
 --- 
 
+
 # Getting Started
 
-## Setting Up Docker Container
+## Basics 
+Firt, create a workspace by using the `/api_v2/workspace` endpoint. 
 
-Create two docker containers:
+Create a library using `/api_v2/workspace/{workspace_id}/add_library` . With this library ID, you can upload documents to 
+this library by sending your documents to `/api_v2/library/{library_id}/file` endpoint. 
 
-- Create an external network for both stacks
+Once you have added all the documents, you can create a transaction by using the `/api_v2/library/{library_id}/transaction` endpoint,
+containing the generated answer to the question you had, using the documents you uploaded. 
 
+That's simple, isn't it?
 
-`>>> docker network create traefik-public`
+For full details on the available APIs and their options visit the api reference.
 
-- Create an external minio volume for the stacks
+## Authentication
+Some APIs of `subtl` uses an Bearer Authentication for authenticating requests. This is required to secure the API calls. Add an http header in the following form to your requests.
 
+authorization: Bearer <your_api_key>
 
-`>>> docker volume create subtl_bot_minio-data`
+You can request an API key from us. 
 
+# Concepts 
 
-## Running the Doc Parser stack
+## Workspace 
+In `subtl.ai`, we define the workspace as an single indepedent thread for 
 
-Go to the doc parser directory:
+## Library 
+Libraries represents a collection, wherence for each workspace, the library stores the transactions and documents.
+In a sense, the workspace represents the metadata for the thread, while the library represents the main content of the 
+thread. 
 
+## Document
+Documents represents the chunks that are used to provide context to an LLM and reduce the chance of hallucination
+to the LLM. These chunks 
 
-`>>> cd subtl_doc_parser`
-
-Create an `.env` file by copying the variables from `.env.example`:
-
-
-`>>> cp .env.example .env`
-
-
-Adjust the `.env` variables appropriately. 
-
-
-Now spin up the stack using the following command:
-
-`>>> ./subtl_doc_parser.sh -g -d -- up --build -d`
-
-This will build and run the `subtl_doc_parser` stack.
-
-
-## Running the Web API stack 
-
-Create an `.env` file by copying the variables from `.env.example`:
+## Transaction
+Transactions are used to denote the retrieval augmented generations that are performed when a user queries in a library.
+Each transaction contains a query, generated answer and the library it belongs to. Transactions 
 
 
-`>>> cp .env.example .env`
+# Tutorial 
+
+This tutorial will walk you through the basics for using Subtl API for your project.
+
+## Step 1 : API Key
+
+You can easily get an API key by requesting any of us for same. 
+
+## Step 2 : Create Workspace
+
+To work with your documents privately, you should create a workspace. This can be done by using sending a POST request to `/api_v2/workspace`
+
+The python code shown here does it. It creates a workspace named, `work` with `free_tier` subscription for now. 
+
+You can reuse a workspace once it is created. 
+
+```python 
+import requests
+import json
+
+url = "http://localhost/api_v2/workspace/"
+headers = {
+    "accept": "application/json",
+    "Content-Type": "application/json"
+}
+data = {
+    "name": "work",
+    "max_threshold": -1,
+    "is_public": False,
+    "is_default": False,
+    "subscription_slug": "free_tier"
+}
+
+response = requests.post(url, headers=headers, data=json.dumps(data)).json()
+
+workspace_id = response["workspace"]["id"],
+
+print(f"Workspace ID : {workspace_id}")
+
+```
+
+## Step 3 : Create Library
+ 
+Once you have created a workspace, you can use it to create a library for the same workspace. 
+The library can be created by using the POST request to `/api_v2/workspace/{workspace_id}/add_library` endpoint. 
+
+It returns a JSON, from which the Python code shows how to extract the Library ID.
 
 
-Adjust the `.env` variables appropriately. 
+```python
+import requests
+import json
+
+url = 'http://localhost/api_v2/workspace/{workspace_id}/add_library'
+headers = {
+    'accept': 'application/json',
+    'Content-Type': 'application/json'
+}
+data = {
+    "name": "string",
+    "desc": "",
+    "public": True,
+    "default_contribute": True
+}
+
+response = requests.post(url, headers=headers, data=json.dumps(data)).json()
+
+# Get the library ID
+print(f"Library ID: {response['library']['group']['id']}")
+```
+
+## Step 4 : Add Documents 
+
+Adding documents is very easy in `subtl.ai`. Once you have created a library, we can upload documents to it by using the `/api_v2/library/{library_id}/file` endpoint.
+We will pass the file to this API and it returns a JSON which confirms that we have uploaded the document to the library.
+
+```python
+import requests
+
+url = 'http://localhost/api_v2/library/{library_id}/file'
+headers = {
+    'accept': 'application/json'
+}
+files = {
+    'file': open('openapi.yaml', 'rb') # Add any file 
+}
+
+response = requests.post(url, headers=headers, files=files)
+
+# Print response 
+print(response.json())
+```
+
+## Step 5 : Querying the Documents 
+
+Once all documents are uploaded to a library, you can finally perform querying on the documents by using the `/api_v2/library/{library_id}/transaction`
+method. 
 
 
-Copy `subtl_llm/app/backends/config.json.example` to `subtl_llm/app/backends/config.json` and add backend configurations in the file:
+```python
 
-`>>> cp subtl_llm/app/backends/config.json.example subtl_llm/app/backends/config.json`
+import requests
+import json
 
-Now spin up the stack using the following command:
+url = 'http://localhost/api_v2/library/{library_id}/transaction'
+headers = {
+    'accept': 'application/json',
+    'Content-Type': 'application/json'
+}
+data = {
+    "query_string": "{your_question_here}",
+    "transaction_ids": [],
+    "agent_persona": "Your name is Subtl Bot. You are an AI assistant designed by researchers and engineers of Subtl.ai to help users based on private knowledge."
+}
 
-`>>> ./run.sh -d -- up --build -d`
+response = requests.post(url, headers=headers, data=json.dumps(data)).json()
 
-This will build and run the `subtl_bot` stack.
+# Print fetched answer
+print(f"Answer generated : {response['generated_answer']}")
+```
 
-The APIs will now go live at `localhost`. 
+## That's it 
+This means, you are now ready to use the subtl API for your project!
 
+# API Docs 
 
-## Request an Authentication Token
+The following describes the APIs offered by Subtl over the public domain:
 
-Some of the APIs, like the `Document` APIs requires an authentication token to validate a request. To do this, you have to request an API token from the us to get started with these APIs.
 
 # Account API 
 
+## Get Current Account
 
-<!--- Account READ BY ID --->
-## Reading An Account By ID
-
-**Description:** This method allows you to fetch details of an account by the ID of the account. 
-
-### HTTP Request 
-`***GET*** /api_v2/account/{account_id}` 
-
-**Parameters**
-
-| Name | Located in | Description | Required | Type |
-| ---- | ---------- | ----------- | -------- | ---- |
-| account_id | path | The ID of the account | Yes | String |
-
-```python
-import requests
-
-url = "http://localhost/api_v2/account/account_id"
-headers = {
-    "accept": "application/json"
-}
-
-response = requests.get(url, headers=headers)
-print(response.json())
-
-```
-
-```java
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
-public class Main {
-    public static void main(String[] args) {
-        try {
-            String url = "http://localhost/api_v2/account/account_id";
-            URL obj = new URL(url);
-            HttpURLConnection con = (HttpURLConnection) obj.openConnection();
-            
-            // Set request method to GET
-            con.setRequestMethod("GET");
-            con.setRequestProperty("Accept", "application/json");
-
-            // Get the response
-            int responseCode = con.getResponseCode();
-            if (responseCode == HttpURLConnection.HTTP_OK) {
-                BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-                String inputLine;
-                StringBuffer response = new StringBuffer();
-
-                while ((inputLine = in.readLine()) != null) {
-                    response.append(inputLine);
-                }
-                in.close();
-                
-                // Print result
-                System.out.println(response.toString());
-            } else {
-                System.out.println("GET request failed. Response Code: " + responseCode);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-}
-
-```
-
-```javascript
-const url = 'http://localhost/api_v2/account/account_id';
-
-fetch(url, {
-  method: 'GET',
-  headers: {
-    'Accept': 'application/json'
-  }
-})
-  .then(response => {
-    if (!response.ok) {
-      throw new Error('Network response was not ok ' + response.statusText);
-    }
-    return response.json();
-  })
-  .then(data => console.log(data))
-  .catch(error => console.error('There was a problem with the fetch operation:', error));
-
-```
-
-```shell
-curl -X 'GET' \
-  'http://localhost/api_v2/account/account_id' \
-  -H 'accept: application/json'
-```
-
-> The above request, on a successful request, returns JSON structured like this:
-
-```json
-{
-  "email": "string",
-  "email_verified": false,
-  "given_name": "string",
-  "family_name": "string",
-  "picture": "string",
-  "id": "string"
-}
-```
-
-**Responses**
-
-| Code | Description | 
-| ---- | ----------- |
-| 200 | Successful Response |
-| 422 | Validation Error |
-
-## Reading An Account By Email 
-
-**Description:** This method allows you to fetch details of an account by the email of the account. 
-
-### HTTP Request 
-`***GET*** /api_v2/account/account_by_email` 
-
-**Parameters**
-
-| Name | Located in | Description | Required | Type |
-| ---- | ---------- | ----------- | -------- | ---- |
-| email_id | query | The email we want to find | Yes |  Email String |
-
-```python
-import requests
-
-url = "http://localhost/api_v2/account/account_by_email"
-params = {"email_id": "email_id"}
-headers = {
-    "accept": "application/json"
-}
-
-response = requests.get(url, headers=headers, params=params)
-print(response.json())
-
-```
-
-```java
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
-public class Main {
-    public static void main(String[] args) {
-        try {
-            String url = "http://localhost/api_v2/account/account_by_email?email_id=email_id";
-            URL obj = new URL(url);
-            HttpURLConnection con = (HttpURLConnection) obj.openConnection();
-            
-            // Set request method to GET
-            con.setRequestMethod("GET");
-            con.setRequestProperty("Accept", "application/json");
-
-            // Get the response
-            int responseCode = con.getResponseCode();
-            if (responseCode == HttpURLConnection.HTTP_OK) {
-                BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-                String inputLine;
-                StringBuffer response = new StringBuffer();
-
-                while ((inputLine = in.readLine()) != null) {
-                    response.append(inputLine);
-                }
-                in.close();
-                
-                // Print result
-                System.out.println(response.toString());
-            } else {
-                System.out.println("GET request failed. Response Code: " + responseCode);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-}
-
-```
-
-```javascript
-const url = 'http://localhost/api_v2/account/account_by_email?email_id=email_id';
-
-fetch(url, {
-  method: 'GET',
-  headers: {
-    'Accept': 'application/json'
-  }
-})
-  .then(response => {
-    if (!response.ok) {
-      throw new Error('Network response was not ok ' + response.statusText);
-    }
-    return response.json();
-  })
-  .then(data => console.log(data))
-  .catch(error => console.error('There was a problem with the fetch operation:', error));
-
-```
-
-```shell
-curl -X 'GET' \
-  'http://localhost/api_v2/account/account_by_email?email_id=email_id' \
-  -H 'accept: application/json'
-```
-
-> The above request, on a successful request, returns JSON structured like this:
-
-```json
-{
-  "email": "string",
-  "email_verified": false,
-  "given_name": "string",
-  "family_name": "string",
-  "picture": "string",
-  "id": "string"
-}
-```
-
-**Responses**
-
-| Code | Description |
-| ---- | ----------- |
-| 200 | Successful Response |
-| 422 | Validation Error |
-
-
-## Deleting An Account By ID
-
-**Summary:** Delete Account
-
-**Description:** Delete a account.
-
-### HTTP Request 
-`***DELETE*** /api_v2/account/{account_id}` 
-
-**Parameters**
-
-| Name | Located in | Description | Required | Type |
-| ---- | ---------- | ----------- | -------- | ---- |
-| account_id | path | The account ID to be deleted | Yes | String |
-
-```python
-import requests
-
-url = "http://localhost/api_v2/account/123456790"
-headers = {
-    "accept": "application/json"
-}
-
-response = requests.delete(url, headers=headers)
-print(response.status_code)
-
-```
-
-```java
-import java.net.HttpURLConnection;
-import java.net.URL;
-
-public class Main {
-    public static void main(String[] args) {
-        try {
-            String url = "http://localhost/api_v2/account/123456790";
-            URL obj = new URL(url);
-            HttpURLConnection con = (HttpURLConnection) obj.openConnection();
-            
-            // Set request method to DELETE
-            con.setRequestMethod("DELETE");
-            con.setRequestProperty("Accept", "application/json");
-
-            // Get the response code
-            int responseCode = con.getResponseCode();
-            System.out.println("Response Code: " + responseCode);
-
-            if (responseCode == HttpURLConnection.HTTP_OK) {
-                System.out.println("Account successfully deleted.");
-            } else {
-                System.out.println("Failed to delete the account.");
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-}
-
-```
-
-```javascript
-const url = 'http://localhost/api_v2/account/123456790';
-
-fetch(url, {
-  method: 'DELETE',
-  headers: {
-    'Accept': 'application/json'
-  }
-})
-  .then(response => {
-    if (!response.ok) {
-      throw new Error('Network response was not ok ' + response.statusText);
-    }
-    console.log('Account successfully deleted');
-  })
-  .catch(error => console.error('There was a problem with the DELETE operation:', error));
-
-```
-
-```shell
-curl -X 'DELETE' \
-  'http://localhost/api_v2/account/123456790' \
-  -H 'accept: application/json'
-```
-
-**Responses**
-
-| Code | Description |
-| ---- | ----------- |
-| 200 | Successful Response |
-| 422 | Validation Error |
-
-
-> The above request, on a successful request, returns JSON structured like this:
-
-```json
-{
-  "message": "string"
-}
-```
-
-
-## Reading Current Account
-
-**Description:** This API allows you to get te details of the current account.
-
-### HTTP Request 
-`***GET*** /api_v2/account/me` 
-
-**Responses**
-
-| Code | Description |
-| ---- | ----------- |
-| 200 | Successful Response |
-
+> Example Usage:
 
 ```python
 import requests
@@ -517,7 +276,7 @@ fetch(url, {
 
 ```
 
-> The above request, on a successful request, returns JSON structured like this:
+> The above request, on a success, returns JSON structured like this:
 
 ```json
 {
@@ -530,14 +289,27 @@ fetch(url, {
 }
 ```
 
-## Updating Current Account
 
-**Summary:** Update Account Me
-
-**Description:** Update own account.
+**Description**: This API allows you to retrieve the details of the current user account, including basic profile information such as email, name, picture, and account verification status.
 
 ### HTTP Request 
-`***PATCH*** /api_v2/account/me` 
+***GET*** request on `/api_v2/account/me`
+
+
+
+**Responses**
+
+| Code | Description |
+| ---- | ----------- |
+| 200 | Successful Response |
+
+
+
+
+## Updating Current Account
+
+> Example Usage:
+
 
 ```python
 import requests
@@ -654,15 +426,7 @@ fetch(url, {
 
 ```
 
-**Responses**
-
-| Code | Description |
-| ---- | ----------- |
-| 200 | Successful Response |
-| 422 | Validation Error |
-
-
-> The above request, on a successful request, returns JSON structured like this:
+> The above request, on sucess, returns JSON structured like this:
 
 ```json
 {
@@ -675,128 +439,11 @@ fetch(url, {
 }
 ```
 
-## Reading All Accounts
-
-**Description:** This API allows you to get details of all the accounts that are stored in the database. 
+**Description** : This API allows the current user to update their account details, such as email, name, profile picture, and email verification status.
 
 ### HTTP Request 
-`***GET*** /api_v2/account/` 
+***PATCH*** request on `/api_v2/account/me` 
 
-```python
-import requests
-
-url = "http://localhost/api_v2/account/"
-params = {
-    "top_doc_counts": "false",
-    "top_transaction_count": "false",
-    "skip": 0,
-    "limit": 100
-}
-headers = {
-    "accept": "application/json"
-}
-
-response = requests.get(url, headers=headers, params=params)
-print(response.json())
-
-```
-
-```shell
-curl -X 'GET' \
-  'http://localhost/api_v2/account/?top_doc_counts=false&top_transaction_count=false&skip=0&limit=100' \
-  -H 'accept: application/json'
-```
-
-```java
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
-public class Main {
-    public static void main(String[] args) {
-        try {
-            String url = "http://localhost/api_v2/account/?top_doc_counts=false&top_transaction_count=false&skip=0&limit=100";
-            URL obj = new URL(url);
-            HttpURLConnection con = (HttpURLConnection) obj.openConnection();
-            
-            // Set request method to GET
-            con.setRequestMethod("GET");
-            con.setRequestProperty("Accept", "application/json");
-
-            // Get the response
-            int responseCode = con.getResponseCode();
-            if (responseCode == HttpURLConnection.HTTP_OK) {
-                BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-                String inputLine;
-                StringBuffer response = new StringBuffer();
-
-                while ((inputLine = in.readLine()) != null) {
-                    response.append(inputLine);
-                }
-                in.close();
-                
-                // Print result
-                System.out.println(response.toString());
-            } else {
-                System.out.println("GET request failed. Response Code: " + responseCode);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-}
-
-```
-
-```javascript
-const url = 'http://localhost/api_v2/account/?top_doc_counts=false&top_transaction_count=false&skip=0&limit=100';
-
-fetch(url, {
-  method: 'GET',
-  headers: {
-    'Accept': 'application/json'
-  }
-})
-  .then(response => {
-    if (!response.ok) {
-      throw new Error('Network response was not ok ' + response.statusText);
-    }
-    return response.json();
-  })
-  .then(data => console.log(data))
-  .catch(error => console.error('There was a problem with the fetch operation:', error));
-
-```
-
-> The above request, on a successful request, returns JSON structured like this:
-
-```json
-{
-  "data": [
-    {
-      "email": "string",
-      "email_verified": false,
-      "given_name": "string",
-      "family_name": "string",
-      "picture": "string",
-      "id": "string",
-      "doc_count": 0,
-      "transaction_count": 0
-    }
-  ],
-  "count": 0
-}
-```
-
-**Parameters**
-
-| Name | Located in | Description | Required | Type |
-| ---- | ---------- | ----------- | -------- | ---- |
-| top_doc_counts | query |  | No |  |
-| top_transaction_count | query |  | No |  |
-| skip | query |  | No |  |
-| limit | query |  | No |  |
 
 **Responses**
 
@@ -807,124 +454,14 @@ fetch(url, {
 
 
 
+
 # Workspace API
-## Get My Workspaces
 
-**Summary:** Fetches the current workspace 
 
-### HTTP Request 
-`***GET*** /api_v2/workspace/` 
 
-**Responses**
+## Creates Workspace
 
-| Code | Description |
-| ---- | ----------- |
-| 200 | Successful Response |
-
-```python
-import requests
-
-url = "http://localhost/api_v2/workspace/"
-headers = {
-    "accept": "application/json"
-}
-
-response = requests.get(url, headers=headers)
-print(response.json())
-
-```
-
-```java
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
-public class Main {
-    public static void main(String[] args) {
-        try {
-            String url = "http://localhost/api_v2/workspace/";
-            URL obj = new URL(url);
-            HttpURLConnection con = (HttpURLConnection) obj.openConnection();
-            
-            // Set request method to GET
-            con.setRequestMethod("GET");
-            con.setRequestProperty("Accept", "application/json");
-
-            // Get the response
-            int responseCode = con.getResponseCode();
-            if (responseCode == HttpURLConnection.HTTP_OK) {
-                BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-                String inputLine;
-                StringBuffer response = new StringBuffer();
-
-                while ((inputLine = in.readLine()) != null) {
-                    response.append(inputLine);
-                }
-                in.close();
-                
-                // Print result
-                System.out.println(response.toString());
-            } else {
-                System.out.println("GET request failed. Response Code: " + responseCode);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-}
-
-```
-
-```javascript
-const url = 'http://localhost/api_v2/workspace/';
-
-fetch(url, {
-  method: 'GET',
-  headers: {
-    'Accept': 'application/json'
-  }
-})
-  .then(response => {
-    if (!response.ok) {
-      throw new Error('Network response was not ok ' + response.statusText);
-    }
-    return response.json();
-  })
-  .then(data => console.log(data))
-  .catch(error => console.error('There was a problem with the fetch operation:', error));
-
-```
-
-```shell
-curl -X 'GET' \
-  'http://localhost/api_v2/workspace/' \
-  -H 'accept: application/json'
-```
-
-> The above request, on a successful request, returns JSON structured like this:
-
-```json
-[
-  {
-    "workspace": {
-      "name": "string",
-      "max_threshold": 0,
-      "is_public": true,
-      "is_default": true,
-      "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
-    },
-    "is_admin": true
-  }
-]
-```
-
-## Creates a Workspace
-
-**Summary:** Create Workspace
-
-### HTTP Request 
-`***POST*** /api_v2/workspace/` 
+> Example Usage: 
 
 ```python
 import requests
@@ -1047,7 +584,7 @@ curl -X 'POST' \
 }'
 ```
 
-> The above request, on a successful request, returns JSON structured like this:
+> The above request, on success, returns JSON structured like this:
 
 ```json
 {
@@ -1095,6 +632,12 @@ curl -X 'POST' \
 }
 ```
 
+
+**Summary:** This API allows the user to create a workspace. 
+
+### HTTP Request 
+***POST*** request on  `/api_v2/workspace/` 
+
 **Responses**
 
 | Code | Description |
@@ -1103,140 +646,15 @@ curl -X 'POST' \
 | 422 | Validation Error |
 
 
+
 ## Get My Workspaces
 
-**Summary:** Get My Workspaces
-
-### HTTP Request 
-`***GET*** /api_v2/workspace/get_user_worspace` 
-
-**Parameters**
-
-| Name | Located in | Description | Required | Type |
-| ---- | ---------- | ----------- | -------- | ---- |
-| populate_libraries | query |  | No |  |
-| account_id | query |  | No |  |
+> Example Usage:
 
 ```python
 import requests
 
-url = "http://localhost/api_v2/workspace/get_user_worspace"
-params = {
-    "populate_libraries": "true",
-    "account_id": "account_id"
-}
-headers = {
-    "accept": "application/json"
-}
-
-response = requests.get(url, headers=headers, params=params)
-print(response.json())
-
-```
-
-```java
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
-public class Main {
-    public static void main(String[] args) {
-        try {
-            String url = "http://localhost/api_v2/workspace/get_user_worspace?populate_libraries=true&account_id=account_id";
-            URL obj = new URL(url);
-            HttpURLConnection con = (HttpURLConnection) obj.openConnection();
-            
-            // Set request method to GET
-            con.setRequestMethod("GET");
-            con.setRequestProperty("Accept", "application/json");
-
-            // Get the response
-            int responseCode = con.getResponseCode();
-            if (responseCode == HttpURLConnection.HTTP_OK) {
-                BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-                String inputLine;
-                StringBuilder response = new StringBuilder();
-
-                while ((inputLine = in.readLine()) != null) {
-                    response.append(inputLine);
-                }
-                in.close();
-                
-                // Print result
-                System.out.println(response.toString());
-            } else {
-                System.out.println("GET request failed. Response Code: " + responseCode);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-}
-
-```
-
-```javascript
-const url = 'http://localhost/api_v2/workspace/get_user_worspace?populate_libraries=true&account_id=account_id';
-
-fetch(url, {
-  method: 'GET',
-  headers: {
-    'Accept': 'application/json'
-  }
-})
-  .then(response => {
-    if (!response.ok) {
-      throw new Error('Network response was not ok ' + response.statusText);
-    }
-    return response.json();
-  })
-  .then(data => console.log(data))
-  .catch(error => console.error('There was a problem with the fetch operation:', error));
-
-```
-
-```shell
-curl -X 'GET' \
-  'http://localhost/api_v2/workspace/get_user_worspace?populate_libraries=true&account_id=account_id' \
-  -H 'accept: application/json'
-```
-
-> The above request, on a successful request, returns JSON structured like this:
-
-```json
-[
-  {
-    "workspace": {
-      "name": "string",
-      "max_threshold": 0,
-      "is_public": true,
-      "is_default": true,
-      "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
-    },
-    "is_admin": true
-  }
-]
-```
-
-**Responses**
-
-| Code | Description |
-| ---- | ----------- |
-| 200 | Successful Response |
-| 422 | Validation Error |
-
-## Get My Workspaces With Libraries
-
-**Summary:** Get My Workspaces With Libraries
-
-### HTTP Request 
-`***GET*** /api_v2/workspace/all` 
-
-```python
-import requests
-
-url = "http://localhost/api_v2/workspace/all"
+url = "http://localhost/api_v2/workspace/"
 headers = {
     "accept": "application/json"
 }
@@ -1255,7 +673,7 @@ import java.net.URL;
 public class Main {
     public static void main(String[] args) {
         try {
-            String url = "http://localhost/api_v2/workspace/all";
+            String url = "http://localhost/api_v2/workspace/";
             URL obj = new URL(url);
             HttpURLConnection con = (HttpURLConnection) obj.openConnection();
             
@@ -1268,7 +686,7 @@ public class Main {
             if (responseCode == HttpURLConnection.HTTP_OK) {
                 BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
                 String inputLine;
-                StringBuilder response = new StringBuilder();
+                StringBuffer response = new StringBuffer();
 
                 while ((inputLine = in.readLine()) != null) {
                     response.append(inputLine);
@@ -1289,7 +707,7 @@ public class Main {
 ```
 
 ```javascript
-const url = 'http://localhost/api_v2/workspace/all';
+const url = 'http://localhost/api_v2/workspace/';
 
 fetch(url, {
   method: 'GET',
@@ -1310,11 +728,11 @@ fetch(url, {
 
 ```shell
 curl -X 'GET' \
-  'http://localhost/api_v2/workspace/all' \
+  'http://localhost/api_v2/workspace/' \
   -H 'accept: application/json'
 ```
 
-> The above request, on a successful request, returns JSON structured like this:
+> The above request, on success, returns JSON structured like this:
 
 ```json
 [
@@ -1324,45 +742,18 @@ curl -X 'GET' \
       "max_threshold": 0,
       "is_public": true,
       "is_default": true,
-      "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-      "libraries": [
-        {
-          "name": "string",
-          "desc": "string",
-          "public": true,
-          "default_contribute": true,
-          "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-          "workspace_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-          "group": {
-            "id": "string",
-            "name": "string",
-            "index_built": true,
-            "index_loaded": true,
-            "doc_processed_count": 0
-          }
-        }
-      ]
+      "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
     },
-    "is_admin": true,
-    "subscription": {
-      "name": "string",
-      "description": "string",
-      "total_token_limit": 0,
-      "allowed_questions_per_day": 0,
-      "max_users": 0,
-      "library_limit": 0,
-      "price": 0,
-      "additional_user_price": 0,
-      "additional_user_questions_per_day": 0,
-      "slug": "string",
-      "workspace_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-      "start_date": "2024-10-07T22:13:15.735Z",
-      "end_date": "2024-10-07T22:13:15.735Z",
-      "active": true
-    }
+    "is_admin": true
   }
 ]
 ```
+
+**Description:** Fetches the current workspaces of the user. This API returns an array of workspaces that the user 
+belongs to.
+
+### HTTP Request 
+***GET*** request on `/api_v2/workspace/` 
 
 **Responses**
 
@@ -1372,10 +763,7 @@ curl -X 'GET' \
 
 ## Update Workspace
 
-**Summary:** Update Workspace
-
-### HTTP Request 
-`***PATCH*** /api_v2/workspace/{workspace_id}` 
+> Example Usage: 
 
 ```python
 import requests
@@ -1492,7 +880,7 @@ curl -X 'PATCH' \
 }'
 ```
 
-> The above request, on a successful request, returns JSON structured like this:
+> The above request, on success, returns JSON structured like this:
 
 ```json
 {
@@ -1503,6 +891,11 @@ curl -X 'PATCH' \
   "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
 }
 ```
+
+**Description:** This API is used to perform update on a workspace. 
+
+### HTTP Request 
+***PATCH*** request on `/api_v2/workspace/{workspace_id}` 
 
 **Parameters**
 
@@ -1519,16 +912,7 @@ curl -X 'PATCH' \
 
 ## Delete Workspace
 
-**Summary:** Delete Workspace
-
-### HTTP Request 
-`***DELETE*** /api_v2/workspace/{workspace_id}` 
-
-**Parameters**
-
-| Name | Located in | Description | Required | Type |
-| ---- | ---------- | ----------- | -------- | ---- |
-| workspace_id | path |  | Yes |  |
+> Example Usage: 
 
 ```python
 import requests
@@ -1616,11 +1000,142 @@ curl -X 'DELETE' \
   -H 'accept: application/json'
 ```
 
-> The above request, on a successful request, returns JSON structured like this:
+> The above request, on success, returns JSON structured like this:
 
 ```json
 "string"
 ```
+
+**Description:** Delete Workspace
+
+### HTTP Request 
+***DELETE*** request on `/api_v2/workspace/{workspace_id}` 
+
+**Parameters**
+
+| Name | Located in | Description | Required | Type |
+| ---- | ---------- | ----------- | -------- | ---- |
+| workspace_id | path |  | Yes |  |
+
+**Responses**
+
+| Code | Description |
+| ---- | ----------- |
+| 200 | Successful Response |
+| 422 | Validation Error |
+
+## Add User To Workspace
+
+> Example Usage:
+
+```python
+import requests
+
+url = "http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/add_user?user_id={user_id}&is_admin=false"
+headers = {
+    "accept": "application/json"
+}
+
+response = requests.post(url, headers=headers)
+print(response.json())
+
+```
+
+```java
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+
+public class Main {
+    public static void main(String[] args) {
+        try {
+            String url = "http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/add_user?user_id={user_id}&is_admin=false";
+            URL obj = new URL(url);
+            HttpURLConnection con = (HttpURLConnection) obj.openConnection();
+            
+            con.setRequestMethod("POST");
+            con.setRequestProperty("Accept", "application/json");
+
+            int responseCode = con.getResponseCode();
+            System.out.println("Response Code: " + responseCode);
+            
+            if (responseCode == HttpURLConnection.HTTP_OK) {
+                BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
+                String inputLine;
+                StringBuilder response = new StringBuilder();
+
+                while ((inputLine = in.readLine()) != null) {
+                    response.append(inputLine);
+                }
+                in.close();
+                
+                System.out.println(response.toString());
+            } else {
+                System.out.println("POST request failed. Response Code: " + responseCode);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+}
+
+```
+
+```javascript
+const url = 'http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/add_user?user_id={user_id}&is_admin=false';
+
+fetch(url, {
+  method: 'POST',
+  headers: {
+    'Accept': 'application/json'
+  }
+})
+  .then(response => {
+    if (!response.ok) {
+      throw new Error('Network response was not ok ' + response.statusText);
+    }
+    return response.json();
+  })
+  .then(data => console.log(data))
+  .catch(error => console.error('There was a problem with the fetch operation:', error));
+
+```
+
+```shell
+curl -X 'POST' \
+  'http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/add_user?user_id=%7Buser_id%7D&is_admin=false' \
+  -H 'accept: application/json' \
+  -d ''
+```
+
+> The above request, on success, returns JSON structured like this:
+
+```json
+{
+  "account": {
+    "email": "string",
+    "email_verified": false,
+    "given_name": "string",
+    "family_name": "string",
+    "picture": "string",
+    "id": "string"
+  },
+  "is_admin": true
+}
+```
+**Description:** Add User
+
+### HTTP Request 
+***POST*** request on `/api_v2/workspace/{workspace_id}/add_user` 
+
+**Parameters**
+
+| Name | Located in | Description | Required | Type |
+| ---- | ---------- | ----------- | -------- | ---- |
+| workspace_id | path |  | Yes |  |
+| user_id | query |  | Yes |  |
+| is_admin | query |  | No |  |
 
 **Responses**
 
@@ -1631,16 +1146,7 @@ curl -X 'DELETE' \
 
 ## Get Workspace Users
 
-**Summary:** Get Workspace Users
-
-### HTTP Request 
-`***GET*** /api_v2/workspace/{workspace_id}/users` 
-
-**Parameters**
-
-| Name | Located in | Description | Required | Type |
-| ---- | ---------- | ----------- | -------- | ---- |
-| workspace_id | path |  | Yes |  |
+> Example Usage: 
 
 ```python
 import requests
@@ -1725,7 +1231,7 @@ curl -X 'GET' \
   -H 'accept: application/json'
 ```
 
-> The above request, on a successful request, returns JSON structured like this:
+> The above request, on success, returns JSON structured like this:
 
 ```json
 [
@@ -1743,6 +1249,17 @@ curl -X 'GET' \
 ]
 ```
 
+**Description:** Get Workspace Users
+
+### HTTP Request 
+***GET*** request on `/api_v2/workspace/{workspace_id}/users` 
+
+**Parameters**
+
+| Name | Located in | Description | Required | Type |
+| ---- | ---------- | ----------- | -------- | ---- |
+| workspace_id | path |  | Yes |  |
+
 **Responses**
 
 | Code | Description |
@@ -1750,30 +1267,19 @@ curl -X 'GET' \
 | 200 | Successful Response |
 | 422 | Validation Error |
 
-## Add User
+## Get Workspace Libraries
 
-**Summary:** Add User
-
-### HTTP Request 
-`***POST*** /api_v2/workspace/{workspace_id}/add_user` 
-
-**Parameters**
-
-| Name | Located in | Description | Required | Type |
-| ---- | ---------- | ----------- | -------- | ---- |
-| workspace_id | path |  | Yes |  |
-| user_id | query |  | Yes |  |
-| is_admin | query |  | No |  |
+> Example Usage: 
 
 ```python
 import requests
 
-url = "http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/add_user?user_id={user_id}&is_admin=false"
+url = 'http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/libraries'
 headers = {
-    "accept": "application/json"
+    'accept': 'application/json'
 }
 
-response = requests.post(url, headers=headers)
+response = requests.get(url, headers=headers)
 print(response.json())
 
 ```
@@ -1787,11 +1293,11 @@ import java.net.URL;
 public class Main {
     public static void main(String[] args) {
         try {
-            String url = "http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/add_user?user_id={user_id}&is_admin=false";
+            String url = "http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/libraries";
             URL obj = new URL(url);
             HttpURLConnection con = (HttpURLConnection) obj.openConnection();
             
-            con.setRequestMethod("POST");
+            con.setRequestMethod("GET");
             con.setRequestProperty("Accept", "application/json");
 
             int responseCode = con.getResponseCode();
@@ -1809,7 +1315,7 @@ public class Main {
                 
                 System.out.println(response.toString());
             } else {
-                System.out.println("POST request failed. Response Code: " + responseCode);
+                System.out.println("GET request failed. Response Code: " + responseCode);
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -1820,10 +1326,10 @@ public class Main {
 ```
 
 ```javascript
-const url = 'http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/add_user?user_id={user_id}&is_admin=false';
+const url = 'http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/libraries';
 
 fetch(url, {
-  method: 'POST',
+  method: 'GET',
   headers: {
     'Accept': 'application/json'
   }
@@ -1840,27 +1346,48 @@ fetch(url, {
 ```
 
 ```shell
-curl -X 'POST' \
-  'http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/add_user?user_id=%7Buser_id%7D&is_admin=false' \
-  -H 'accept: application/json' \
-  -d ''
+curl -X 'GET' \
+  'http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/libraries' \
+  -H 'accept: application/json'
 ```
 
-> The above request, on a successful request, returns JSON structured like this:
+> The above request, on success, returns JSON structured like this:
 
 ```json
-{
-  "account": {
-    "email": "string",
-    "email_verified": false,
-    "given_name": "string",
-    "family_name": "string",
-    "picture": "string",
-    "id": "string"
-  },
-  "is_admin": true
-}
+[
+  {
+    "library": {
+      "name": "string",
+      "desc": "string",
+      "public": true,
+      "default_contribute": true,
+      "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "workspace_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "group": {
+        "id": "string",
+        "name": "string",
+        "index_built": true,
+        "index_loaded": true,
+        "doc_processed_count": 0
+      }
+    },
+    "is_admin": true,
+    "can_upload": true,
+    "is_expert": true
+  }
+]
 ```
+
+**Description:** Get Workspace Libraries
+
+### HTTP Request 
+***GET*** request on `/api_v2/workspace/{workspace_id}/libraries` 
+
+**Parameters**
+
+| Name | Located in | Description | Required | Type |
+| ---- | ---------- | ----------- | -------- | ---- |
+| workspace_id | path |  | Yes |  |
 
 **Responses**
 
@@ -1869,18 +1396,135 @@ curl -X 'POST' \
 | 200 | Successful Response |
 | 422 | Validation Error |
 
-## Create New Library
+## Get Workspace Public Libraries
 
-**Summary:** Create New Library
+> Example Usage: 
+
+```python
+import requests
+
+url = 'http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/public_libraries'
+headers = {
+    'accept': 'application/json'
+}
+
+response = requests.get(url, headers=headers)
+print(response.json())
+
+```
+
+```java
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+
+public class Main {
+    public static void main(String[] args) {
+        try {
+            String url = "http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/public_libraries";
+            URL obj = new URL(url);
+            HttpURLConnection con = (HttpURLConnection) obj.openConnection();
+            
+            con.setRequestMethod("GET");
+            con.setRequestProperty("Accept", "application/json");
+
+            int responseCode = con.getResponseCode();
+            System.out.println("Response Code: " + responseCode);
+            
+            if (responseCode == HttpURLConnection.HTTP_OK) {
+                BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
+                String inputLine;
+                StringBuilder response = new StringBuilder();
+
+                while ((inputLine = in.readLine()) != null) {
+                    response.append(inputLine);
+                }
+                in.close();
+                
+                System.out.println(response.toString());
+            } else {
+                System.out.println("GET request failed. Response Code: " + responseCode);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+}
+
+```
+
+```javascript
+const url = 'http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/public_libraries';
+
+fetch(url, {
+  method: 'GET',
+  headers: {
+    'Accept': 'application/json'
+  }
+})
+  .then(response => {
+    if (!response.ok) {
+      throw new Error('Network response was not ok ' + response.statusText);
+    }
+    return response.json();
+  })
+  .then(data => console.log(data))
+  .catch(error => console.error('There was a problem with the fetch operation:', error));
+
+```
+
+```shell
+curl -X 'GET' \
+  'http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/public_libraries' \
+  -H 'accept: application/json'
+```
+
+> The above request, on success, returns JSON structured like this:
+
+```json
+[
+  {
+    "name": "string",
+    "desc": "string",
+    "public": true,
+    "default_contribute": true,
+    "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "workspace_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "group": {
+      "id": "string",
+      "name": "string",
+      "index_built": true,
+      "index_loaded": true,
+      "doc_processed_count": 0
+    }
+  }
+]
+```
+**Description:** Get Workspace Public Libraries
 
 ### HTTP Request 
-`***POST*** /api_v2/workspace/{workspace_id}/add_library` 
+***GET*** request on `/api_v2/workspace/{workspace_id}/public_libraries` 
 
 **Parameters**
 
 | Name | Located in | Description | Required | Type |
 | ---- | ---------- | ----------- | -------- | ---- |
 | workspace_id | path |  | Yes |  |
+
+**Responses**
+
+| Code | Description |
+| ---- | ----------- |
+| 200 | Successful Response |
+| 422 | Validation Error |
+
+
+# Library API
+
+## Create Library
+
+> Example Usage: 
 
 ```python
 import requests
@@ -1996,7 +1640,7 @@ curl -X 'POST' \
 }'
 ```
 
-> The above request, on a successful request, returns JSON structured like this:
+> The above request, on success, returns JSON structured like this:
 
 ```json
 {
@@ -2021,132 +1665,16 @@ curl -X 'POST' \
 }
 ```
 
-**Responses**
-
-| Code | Description |
-| ---- | ----------- |
-| 201 | Successful Response |
-| 422 | Validation Error |
-
-## Port New Library
-
-**Summary:** Port New Library
+**Description:** Create New Library
 
 ### HTTP Request 
-`***POST*** /api_v2/workspace/{workspace_id}/port_library` 
+***POST*** request on `/api_v2/workspace/{workspace_id}/add_library` 
 
 **Parameters**
 
 | Name | Located in | Description | Required | Type |
 | ---- | ---------- | ----------- | -------- | ---- |
 | workspace_id | path |  | Yes |  |
-| group_idx | query |  | Yes |  |
-
-```python
-import requests
-
-url = 'http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/port_library?group_idx={group_idx}'
-headers = {
-    'accept': 'application/json'
-}
-
-response = requests.post(url, headers=headers)
-print(response.json())
-
-```
-
-```java
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
-public class Main {
-    public static void main(String[] args) {
-        try {
-            String url = "http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/port_library?group_idx={group_idx}";
-            URL obj = new URL(url);
-            HttpURLConnection con = (HttpURLConnection) obj.openConnection();
-            
-            con.setRequestMethod("POST");
-            con.setRequestProperty("Accept", "application/json");
-
-            int responseCode = con.getResponseCode();
-            System.out.println("Response Code: " + responseCode);
-            
-            if (responseCode == HttpURLConnection.HTTP_OK) {
-                BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-                String inputLine;
-                StringBuilder response = new StringBuilder();
-
-                while ((inputLine = in.readLine()) != null) {
-                    response.append(inputLine);
-                }
-                in.close();
-                
-                System.out.println(response.toString());
-            } else {
-                System.out.println("POST request failed. Response Code: " + responseCode);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-}
-
-```
-
-```javascript
-const url = 'http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/port_library?group_idx={group_idx}';
-
-fetch(url, {
-  method: 'POST',
-  headers: {
-    'Accept': 'application/json'
-  }
-})
-  .then(response => {
-    if (!response.ok) {
-      throw new Error('Network response was not ok ' + response.statusText);
-    }
-    return response.json();
-  })
-  .then(data => console.log(data))
-  .catch(error => console.error('There was a problem with the fetch operation:', error));
-
-```
-
-```shell
-curl -X 'POST' \
-  'http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/port_library?group_idx=%7Bgroup_idx%7D' \
-  -H 'accept: application/json' \
-  -d ''
-```
-
-> The above request, on a successful request, returns JSON structured like this:
-
-```json
-{
-  "library": {
-    "name": "string",
-    "desc": "string",
-    "public": true,
-    "default_contribute": true,
-    "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-    "workspace_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-    "group": {
-      "id": "string",
-      "name": "string",
-      "index_built": true,
-      "index_loaded": true,
-      "doc_processed_count": 0
-    }
-  },
-  "is_admin": true,
-  "can_upload": true,
-  "is_expert": true
-}
-```
 
 **Responses**
 
@@ -2155,1246 +1683,9 @@ curl -X 'POST' \
 | 201 | Successful Response |
 | 422 | Validation Error |
 
-## Get Workspace Libraries
+## Update Library
 
-**Summary:** Get Workspace Libraries
-
-### HTTP Request 
-`***GET*** /api_v2/workspace/{workspace_id}/libraries` 
-
-**Parameters**
-
-| Name | Located in | Description | Required | Type |
-| ---- | ---------- | ----------- | -------- | ---- |
-| workspace_id | path |  | Yes |  |
-
-```python
-import requests
-
-url = 'http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/libraries'
-headers = {
-    'accept': 'application/json'
-}
-
-response = requests.get(url, headers=headers)
-print(response.json())
-
-```
-
-```java
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
-public class Main {
-    public static void main(String[] args) {
-        try {
-            String url = "http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/libraries";
-            URL obj = new URL(url);
-            HttpURLConnection con = (HttpURLConnection) obj.openConnection();
-            
-            con.setRequestMethod("GET");
-            con.setRequestProperty("Accept", "application/json");
-
-            int responseCode = con.getResponseCode();
-            System.out.println("Response Code: " + responseCode);
-            
-            if (responseCode == HttpURLConnection.HTTP_OK) {
-                BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-                String inputLine;
-                StringBuilder response = new StringBuilder();
-
-                while ((inputLine = in.readLine()) != null) {
-                    response.append(inputLine);
-                }
-                in.close();
-                
-                System.out.println(response.toString());
-            } else {
-                System.out.println("GET request failed. Response Code: " + responseCode);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-}
-
-```
-
-```javascript
-const url = 'http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/libraries';
-
-fetch(url, {
-  method: 'GET',
-  headers: {
-    'Accept': 'application/json'
-  }
-})
-  .then(response => {
-    if (!response.ok) {
-      throw new Error('Network response was not ok ' + response.statusText);
-    }
-    return response.json();
-  })
-  .then(data => console.log(data))
-  .catch(error => console.error('There was a problem with the fetch operation:', error));
-
-```
-
-```shell
-curl -X 'GET' \
-  'http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/libraries' \
-  -H 'accept: application/json'
-```
-
-> The above request, on a successful request, returns JSON structured like this:
-
-```json
-[
-  {
-    "library": {
-      "name": "string",
-      "desc": "string",
-      "public": true,
-      "default_contribute": true,
-      "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-      "workspace_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-      "group": {
-        "id": "string",
-        "name": "string",
-        "index_built": true,
-        "index_loaded": true,
-        "doc_processed_count": 0
-      }
-    },
-    "is_admin": true,
-    "can_upload": true,
-    "is_expert": true
-  }
-]
-```
-
-**Responses**
-
-| Code | Description |
-| ---- | ----------- |
-| 200 | Successful Response |
-| 422 | Validation Error |
-
-## Get Workspace Public Libraries
-
-**Summary:** Get Workspace Public Libraries
-
-### HTTP Request 
-`***GET*** /api_v2/workspace/{workspace_id}/public_libraries` 
-
-**Parameters**
-
-| Name | Located in | Description | Required | Type |
-| ---- | ---------- | ----------- | -------- | ---- |
-| workspace_id | path |  | Yes |  |
-
-```python
-import requests
-
-url = 'http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/public_libraries'
-headers = {
-    'accept': 'application/json'
-}
-
-response = requests.get(url, headers=headers)
-print(response.json())
-
-```
-
-```java
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
-public class Main {
-    public static void main(String[] args) {
-        try {
-            String url = "http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/public_libraries";
-            URL obj = new URL(url);
-            HttpURLConnection con = (HttpURLConnection) obj.openConnection();
-            
-            con.setRequestMethod("GET");
-            con.setRequestProperty("Accept", "application/json");
-
-            int responseCode = con.getResponseCode();
-            System.out.println("Response Code: " + responseCode);
-            
-            if (responseCode == HttpURLConnection.HTTP_OK) {
-                BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-                String inputLine;
-                StringBuilder response = new StringBuilder();
-
-                while ((inputLine = in.readLine()) != null) {
-                    response.append(inputLine);
-                }
-                in.close();
-                
-                System.out.println(response.toString());
-            } else {
-                System.out.println("GET request failed. Response Code: " + responseCode);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-}
-
-```
-
-```javascript
-const url = 'http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/public_libraries';
-
-fetch(url, {
-  method: 'GET',
-  headers: {
-    'Accept': 'application/json'
-  }
-})
-  .then(response => {
-    if (!response.ok) {
-      throw new Error('Network response was not ok ' + response.statusText);
-    }
-    return response.json();
-  })
-  .then(data => console.log(data))
-  .catch(error => console.error('There was a problem with the fetch operation:', error));
-
-```
-
-```shell
-curl -X 'GET' \
-  'http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/public_libraries' \
-  -H 'accept: application/json'
-```
-
-> The above request, on a successful request, returns JSON structured like this:
-
-```json
-[
-  {
-    "name": "string",
-    "desc": "string",
-    "public": true,
-    "default_contribute": true,
-    "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-    "workspace_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-    "group": {
-      "id": "string",
-      "name": "string",
-      "index_built": true,
-      "index_loaded": true,
-      "doc_processed_count": 0
-    }
-  }
-]
-```
-
-**Responses**
-
-| Code | Description |
-| ---- | ----------- |
-| 200 | Successful Response |
-| 422 | Validation Error |
-
-
-
-## Send Workspace Invite
-
-**Summary:** Send Workspace Invite
-
-### HTTP Request 
-`***POST*** /api_v2/workspace/{workspace_id}/send_invite` 
-
-**Parameters**
-
-| Name | Located in | Description | Required | Type |
-| ---- | ---------- | ----------- | -------- | ---- |
-| workspace_id | path |  | Yes |  |
-
-```python
-import requests
-import json
-
-url = 'http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/send_invite'
-headers = {
-    'accept': 'application/json',
-    'Content-Type': 'application/json'
-}
-data = {
-    "user_identifier": "string",
-    "is_admin_request": False
-}
-
-response = requests.post(url, headers=headers, data=json.dumps(data))
-print(response.json())
-
-```
-
-```java
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
-public class Main {
-    public static void main(String[] args) {
-        try {
-            String url = "http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/send_invite";
-            URL obj = new URL(url);
-            HttpURLConnection con = (HttpURLConnection) obj.openConnection();
-            
-            con.setRequestMethod("POST");
-            con.setRequestProperty("Accept", "application/json");
-            con.setRequestProperty("Content-Type", "application/json");
-            con.setDoOutput(true);
-            
-            String jsonInputString = "{\"user_identifier\": \"string\", \"is_admin_request\": false}";
-
-            try (OutputStream os = con.getOutputStream()) {
-                byte[] input = jsonInputString.getBytes("utf-8");
-                os.write(input, 0, input.length);           
-            }
-
-            int responseCode = con.getResponseCode();
-            System.out.println("Response Code: " + responseCode);
-            
-            if (responseCode == HttpURLConnection.HTTP_OK) {
-                BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-                String inputLine;
-                StringBuilder response = new StringBuilder();
-
-                while ((inputLine = in.readLine()) != null) {
-                    response.append(inputLine);
-                }
-                in.close();
-                
-                System.out.println(response.toString());
-            } else {
-                System.out.println("POST request failed. Response Code: " + responseCode);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-}
-
-```
-
-```javascript
-const url = 'http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/send_invite';
-
-const data = {
-  user_identifier: "string",
-  is_admin_request: false
-};
-
-fetch(url, {
-  method: 'POST',
-  headers: {
-    'Accept': 'application/json',
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify(data)
-})
-  .then(response => {
-    if (!response.ok) {
-      throw new Error('Network response was not ok ' + response.statusText);
-    }
-    return response.json();
-  })
-  .then(data => console.log(data))
-  .catch(error => console.error('There was a problem with the fetch operation:', error));
-
-```
-
-```shell
-curl -X 'POST' \
-  'http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/send_invite' \
-  -H 'accept: application/json' \
-  -H 'Content-Type: application/json' \
-  -d '{
-  "user_identifier": "string",
-  "is_admin_request": false
-}'
-```
-
-> The above request, on a successful request, returns JSON structured like this:
-
-```json
-{}
-```
-
-**Responses**
-
-| Code | Description |
-| ---- | ----------- |
-| 201 | Successful Response |
-| 422 | Validation Error |
-
-## Accept Workspace Invite
-
-**Summary:** Accept Workspace Invite
-
-### HTTP Request 
-`***POST*** /api_v2/workspace/{invitation_id}/accept_invite` 
-
-**Parameters**
-
-| Name | Located in | Description | Required | Type |
-| ---- | ---------- | ----------- | -------- | ---- |
-| invitation_id | path |  | Yes |  |
-
-```python
-import requests
-
-url = 'http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/accept_invite'
-headers = {
-    'accept': 'application/json'
-}
-
-response = requests.post(url, headers=headers)
-print(response.json())
-
-```
-
-```java
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
-public class Main {
-    public static void main(String[] args) {
-        try {
-            String url = "http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/accept_invite";
-            URL obj = new URL(url);
-            HttpURLConnection con = (HttpURLConnection) obj.openConnection();
-            
-            con.setRequestMethod("POST");
-            con.setRequestProperty("Accept", "application/json");
-            con.setDoOutput(true); // Enable output if you want to send a body
-
-            int responseCode = con.getResponseCode();
-            System.out.println("Response Code: " + responseCode);
-            
-            if (responseCode == HttpURLConnection.HTTP_OK) {
-                BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-                String inputLine;
-                StringBuilder response = new StringBuilder();
-
-                while ((inputLine = in.readLine()) != null) {
-                    response.append(inputLine);
-                }
-                in.close();
-                
-                System.out.println(response.toString());
-            } else {
-                System.out.println("POST request failed. Response Code: " + responseCode);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-}
-
-```
-
-```javascript
-const url = 'http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/accept_invite';
-
-fetch(url, {
-  method: 'POST',
-  headers: {
-    'Accept': 'application/json'
-  }
-})
-  .then(response => {
-    if (!response.ok) {
-      throw new Error('Network response was not ok ' + response.statusText);
-    }
-    return response.json();
-  })
-  .then(data => console.log(data))
-  .catch(error => console.error('There was a problem with the fetch operation:', error));
-
-```
-
-```shell
-curl -X 'POST' \
-  'http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/accept_invite' \
-  -H 'accept: application/json' \
-  -d ''
-```
-
-> The above request, on a successful request, returns JSON structured like this:
-
-```json
-{}
-```
-
-**Responses**
-
-| Code | Description |
-| ---- | ----------- |
-| 200 | Successful Response |
-| 422 | Validation Error |
-
-##  Request To Join Workspace
-
-**Summary:** Request To Join Workspace
-
-### HTTP Request 
-`***POST*** /api_v2/workspace/{workspace_id}/ask_to_join` 
-
-**Parameters**
-
-| Name | Located in | Description | Required | Type |
-| ---- | ---------- | ----------- | -------- | ---- |
-| workspace_id | path |  | Yes |  |
-
-```python
-import requests
-
-url = 'http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/ask_to_join'
-headers = {
-    'accept': 'application/json'
-}
-
-response = requests.post(url, headers=headers)
-print(response.json())
-
-```
-
-```java
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
-public class Main {
-    public static void main(String[] args) {
-        try {
-            String url = "http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/ask_to_join";
-            URL obj = new URL(url);
-            HttpURLConnection con = (HttpURLConnection) obj.openConnection();
-            
-            con.setRequestMethod("POST");
-            con.setRequestProperty("Accept", "application/json");
-            con.setDoOutput(true); // Enable output if you want to send a body
-
-            int responseCode = con.getResponseCode();
-            System.out.println("Response Code: " + responseCode);
-            
-            if (responseCode == HttpURLConnection.HTTP_OK) {
-                BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-                String inputLine;
-                StringBuilder response = new StringBuilder();
-
-                while ((inputLine = in.readLine()) != null) {
-                    response.append(inputLine);
-                }
-                in.close();
-                
-                System.out.println(response.toString());
-            } else {
-                System.out.println("POST request failed. Response Code: " + responseCode);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-}
-
-```
-
-```javascript
-const url = 'http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/ask_to_join';
-
-fetch(url, {
-  method: 'POST',
-  headers: {
-    'Accept': 'application/json'
-  }
-})
-  .then(response => {
-    if (!response.ok) {
-      throw new Error('Network response was not ok ' + response.statusText);
-    }
-    return response.json();
-  })
-  .then(data => console.log(data))
-  .catch(error => console.error('There was a problem with the fetch operation:', error));
-
-```
-
-```shell
-curl -X 'POST' \
-  'http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/ask_to_join' \
-  -H 'accept: application/json' \
-  -d ''
-```
-> The above request, on a successful request, returns JSON structured like this:
-
-```json
-{}
-```
-
-**Responses**
-
-| Code | Description |
-| ---- | ----------- |
-| 201 | Successful Response |
-| 422 | Validation Error |
-
-## Accept Workspace Join Request
-
-**Summary:** Accept Workspace Join Request
-
-### HTTP Request 
-`***POST*** /api_v2/workspace/{invitation_id}/accept_request` 
-
-**Parameters**
-
-| Name | Located in | Description | Required | Type |
-| ---- | ---------- | ----------- | -------- | ---- |
-| invitation_id | path |  | Yes |  |
-
-```python
-import requests
-
-url = 'http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/accept_request'
-headers = {
-    'accept': 'application/json'
-}
-
-response = requests.post(url, headers=headers)
-print(response.json())
-
-```
-
-```java
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
-public class Main {
-    public static void main(String[] args) {
-        try {
-            String url = "http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/accept_request";
-            URL obj = new URL(url);
-            HttpURLConnection con = (HttpURLConnection) obj.openConnection();
-            
-            con.setRequestMethod("POST");
-            con.setRequestProperty("Accept", "application/json");
-            con.setDoOutput(true); // Enable output if you want to send a body
-
-            int responseCode = con.getResponseCode();
-            System.out.println("Response Code: " + responseCode);
-            
-            if (responseCode == HttpURLConnection.HTTP_OK) {
-                BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-                String inputLine;
-                StringBuilder response = new StringBuilder();
-
-                while ((inputLine = in.readLine()) != null) {
-                    response.append(inputLine);
-                }
-                in.close();
-                
-                System.out.println(response.toString());
-            } else {
-                System.out.println("POST request failed. Response Code: " + responseCode);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-}
-
-```
-
-```javascript
-const url = 'http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/accept_request';
-
-fetch(url, {
-  method: 'POST',
-  headers: {
-    'Accept': 'application/json'
-  }
-})
-  .then(response => {
-    if (!response.ok) {
-      throw new Error('Network response was not ok ' + response.statusText);
-    }
-    return response.json();
-  })
-  .then(data => console.log(data))
-  .catch(error => console.error('There was a problem with the fetch operation:', error));
-
-```
-
-```shell
-curl -X 'POST' \
-  'http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/accept_request' \
-  -H 'accept: application/json' \
-  -d ''
-```
-
-> The above request, on a successful request, returns JSON structured like this:
-
-```json
-{}
-```
-
-**Responses**
-
-| Code | Description |
-| ---- | ----------- |
-| 200 | Successful Response |
-| 422 | Validation Error |
-
-## Reject Invitation
-
-**Summary:** Reject Invitation
-
-### HTTP Request 
-`***POST*** /api_v2/workspace/{invitation_id}/reject_invite` 
-
-**Parameters**
-
-| Name | Located in | Description | Required | Type |
-| ---- | ---------- | ----------- | -------- | ---- |
-| invitation_id | path |  | Yes |  |
-
-```python
-import requests
-
-url = 'http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/reject_invite'
-headers = {
-    'accept': 'application/json'
-}
-
-response = requests.post(url, headers=headers)
-print(response.json())
-
-```
-
-```java
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
-public class Main {
-    public static void main(String[] args) {
-        try {
-            String url = "http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/reject_invite";
-            URL obj = new URL(url);
-            HttpURLConnection con = (HttpURLConnection) obj.openConnection();
-            
-            con.setRequestMethod("POST");
-            con.setRequestProperty("Accept", "application/json");
-            con.setDoOutput(true); // Enable output if you want to send a body
-
-            int responseCode = con.getResponseCode();
-            System.out.println("Response Code: " + responseCode);
-            
-            if (responseCode == HttpURLConnection.HTTP_OK) {
-                BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-                String inputLine;
-                StringBuilder response = new StringBuilder();
-
-                while ((inputLine = in.readLine()) != null) {
-                    response.append(inputLine);
-                }
-                in.close();
-                
-                System.out.println(response.toString());
-            } else {
-                System.out.println("POST request failed. Response Code: " + responseCode);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-}
-
-```
-
-```javascript
-const url = 'http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/reject_invite';
-
-fetch(url, {
-  method: 'POST',
-  headers: {
-    'Accept': 'application/json'
-  }
-})
-  .then(response => {
-    if (!response.ok) {
-      throw new Error('Network response was not ok ' + response.statusText);
-    }
-    return response.json();
-  })
-  .then(data => console.log(data))
-  .catch(error => console.error('There was a problem with the fetch operation:', error));
-
-```
-
-```shell
-curl -X 'POST' \
-  'http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/reject_invite' \
-  -H 'accept: application/json' \
-  -d ''
-```
-
-> The above request, on a successful request, returns JSON structured like this:
-
-```json
-{}
-```
-
-**Responses**
-
-| Code | Description |
-| ---- | ----------- |
-| 200 | Successful Response |
-| 422 | Validation Error |
-
-## Edit User
-
-**Summary:** Edit User
-
-### HTTP Request 
-`***POST*** /api_v2/workspace/{workspace_id}/edit_user` 
-
-**Parameters**
-
-| Name | Located in | Description | Required | Type |
-| ---- | ---------- | ----------- | -------- | ---- |
-| workspace_id | path |  | Yes |  |
-
-```python
-import requests
-import json
-
-url = 'http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/edit_user'
-headers = {
-    'accept': 'application/json',
-    'Content-Type': 'application/json'
-}
-data = {
-    "user_id": "string",
-    "is_admin": True
-}
-
-response = requests.post(url, headers=headers, data=json.dumps(data))
-print(response.json())
-
-```
-
-```java
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
-public class Main {
-    public static void main(String[] args) {
-        try {
-            String url = "http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/edit_user";
-            URL obj = new URL(url);
-            HttpURLConnection con = (HttpURLConnection) obj.openConnection();
-            
-            con.setRequestMethod("POST");
-            con.setRequestProperty("Accept", "application/json");
-            con.setRequestProperty("Content-Type", "application/json");
-            con.setDoOutput(true); // Enable output to send a body
-
-            String jsonInputString = "{\"user_id\": \"string\", \"is_admin\": true}";
-
-            try(OutputStream os = con.getOutputStream()) {
-                byte[] input = jsonInputString.getBytes("utf-8");
-                os.write(input, 0, input.length);           
-            }
-
-            int responseCode = con.getResponseCode();
-            System.out.println("Response Code: " + responseCode);
-            
-            if (responseCode == HttpURLConnection.HTTP_OK) {
-                BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-                String inputLine;
-                StringBuilder response = new StringBuilder();
-
-                while ((inputLine = in.readLine()) != null) {
-                    response.append(inputLine);
-                }
-                in.close();
-                
-                System.out.println(response.toString());
-            } else {
-                System.out.println("POST request failed. Response Code: " + responseCode);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-}
-
-```
-
-```javascript
-const url = 'http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/edit_user';
-
-const data = {
-  user_id: "string",
-  is_admin: true
-};
-
-fetch(url, {
-  method: 'POST',
-  headers: {
-    'Accept': 'application/json',
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify(data)
-})
-  .then(response => {
-    if (!response.ok) {
-      throw new Error('Network response was not ok ' + response.statusText);
-    }
-    return response.json();
-  })
-  .then(data => console.log(data))
-  .catch(error => console.error('There was a problem with the fetch operation:', error));
-
-```
-
-```shell
-curl -X 'POST' \
-  'http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/edit_user' \
-  -H 'accept: application/json' \
-  -H 'Content-Type: application/json' \
-  -d '{
-  "user_id": "string",
-  "is_admin": true
-}'
-```
-
-> The above request, on a successful request, returns JSON structured like this:
-
-```json
-{
-  "account": {
-    "email": "string",
-    "email_verified": false,
-    "given_name": "string",
-    "family_name": "string",
-    "picture": "string",
-    "id": "string"
-  },
-  "is_admin": true
-}
-```
-
-**Responses**
-
-| Code | Description |
-| ---- | ----------- |
-| 200 | Successful Response |
-| 422 | Validation Error |
-
-## Remove User
-
-**Summary:** Remove User
-
-### HTTP Request 
-`***POST*** /api_v2/workspace/{workspace_id}/remove_user` 
-
-**Parameters**
-
-| Name | Located in | Description | Required | Type |
-| ---- | ---------- | ----------- | -------- | ---- |
-| workspace_id | path |  | Yes |  |
-
-```python
-import requests
-import json
-
-url = 'http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/remove_user'
-headers = {
-    'accept': 'application/json',
-    'Content-Type': 'application/json'
-}
-data = {
-    "user_id": "string"
-}
-
-response = requests.post(url, headers=headers, data=json.dumps(data))
-print(response.json())
-
-```
-
-```java
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
-public class Main {
-    public static void main(String[] args) {
-        try {
-            String url = "http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/remove_user";
-            URL obj = new URL(url);
-            HttpURLConnection con = (HttpURLConnection) obj.openConnection();
-            
-            con.setRequestMethod("POST");
-            con.setRequestProperty("Accept", "application/json");
-            con.setRequestProperty("Content-Type", "application/json");
-            con.setDoOutput(true); // Enable output to send a body
-
-            String jsonInputString = "{\"user_id\": \"string\"}";
-
-            try (OutputStream os = con.getOutputStream()) {
-                byte[] input = jsonInputString.getBytes("utf-8");
-                os.write(input, 0, input.length);           
-            }
-
-            int responseCode = con.getResponseCode();
-            System.out.println("Response Code: " + responseCode);
-            
-            if (responseCode == HttpURLConnection.HTTP_OK) {
-                BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-                String inputLine;
-                StringBuilder response = new StringBuilder();
-
-                while ((inputLine = in.readLine()) != null) {
-                    response.append(inputLine);
-                }
-                in.close();
-                
-                System.out.println(response.toString());
-            } else {
-                System.out.println("POST request failed. Response Code: " + responseCode);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-}
-
-```
-
-```javascript
-const url = 'http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/remove_user';
-
-const data = {
-  user_id: "string"
-};
-
-fetch(url, {
-  method: 'POST',
-  headers: {
-    'Accept': 'application/json',
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify(data)
-})
-  .then(response => {
-    if (!response.ok) {
-      throw new Error('Network response was not ok ' + response.statusText);
-    }
-    return response.json();
-  })
-  .then(data => console.log(data))
-  .catch(error => console.error('There was a problem with the fetch operation:', error));
-
-```
-
-```shell
-curl -X 'POST' \
-  'http://localhost/api_v2/workspace/123e4567-e89b-12d3-a456-426614174000/remove_user' \
-  -H 'accept: application/json' \
-  -H 'Content-Type: application/json' \
-  -d '{
-  "user_id": "string"
-}'
-```
-
-> The above request, on a successful request, returns JSON structured like this:
-
-```json
-{
-  "account": {
-    "email": "string",
-    "email_verified": false,
-    "given_name": "string",
-    "family_name": "string",
-    "picture": "string",
-    "id": "string"
-  },
-  "is_admin": true
-}
-```
-
-**Responses**
-
-| Code | Description |
-| ---- | ----------- |
-| 200 | Successful Response |
-| 422 | Validation Error |
-
-# Library API
-## Read Library Relation
-
-**Summary:** Read Library Relation
-
-### HTTP Request 
-`***GET*** /api_v2/library/{library_id}` 
-
-**Parameters**
-
-| Name | Located in | Description | Required | Type |
-| ---- | ---------- | ----------- | -------- | ---- |
-| library_id | path |  | Yes |  |
-
-```python
-import requests
-
-url = 'http://localhost/api_v2/library/123e4567-e89b-12d3-a456-426614174000'
-headers = {
-    'accept': 'application/json'
-}
-
-response = requests.get(url, headers=headers)
-print(response.json())
-
-```
-
-```java
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
-public class Main {
-    public static void main(String[] args) {
-        try {
-            String url = "http://localhost/api_v2/library/123e4567-e89b-12d3-a456-426614174000";
-            URL obj = new URL(url);
-            HttpURLConnection con = (HttpURLConnection) obj.openConnection();
-            
-            con.setRequestMethod("GET");
-            con.setRequestProperty("Accept", "application/json");
-
-            int responseCode = con.getResponseCode();
-            System.out.println("Response Code: " + responseCode);
-            
-            if (responseCode == HttpURLConnection.HTTP_OK) {
-                BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-                String inputLine;
-                StringBuilder response = new StringBuilder();
-
-                while ((inputLine = in.readLine()) != null) {
-                    response.append(inputLine);
-                }
-                in.close();
-                
-                System.out.println(response.toString());
-            } else {
-                System.out.println("GET request failed. Response Code: " + responseCode);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-}
-
-```
-
-```javascript
-const url = 'http://localhost/api_v2/library/123e4567-e89b-12d3-a456-426614174000';
-
-fetch(url, {
-  method: 'GET',
-  headers: {
-    'Accept': 'application/json'
-  }
-})
-  .then(response => {
-    if (!response.ok) {
-      throw new Error('Network response was not ok ' + response.statusText);
-    }
-    return response.json();
-  })
-  .then(data => console.log(data))
-  .catch(error => console.error('There was a problem with the fetch operation:', error));
-
-```
-
-```shell
-curl -X 'GET' \
-  'http://localhost/api_v2/library/123e4567-e89b-12d3-a456-426614174000' \
-  -H 'accept: application/json'
-```
-
-> The above request, on a successful request, returns JSON structured like this:
-
-```json
-{
-  "library": {
-    "name": "string",
-    "desc": "string",
-    "public": true,
-    "default_contribute": true,
-    "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-    "workspace_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-    "group": {
-      "id": "string",
-      "name": "string",
-      "index_built": true,
-      "index_loaded": true,
-      "doc_processed_count": 0
-    }
-  },
-  "is_admin": true,
-  "can_upload": true,
-  "is_expert": true
-}
-```
-
-
-**Responses**
-
-| Code | Description |
-| ---- | ----------- |
-| 200 | Successful Response |
-| 422 | Validation Error |
-
-## Update Library Details
-
-**Summary:** Update Library Details
-
-### HTTP Request 
-`***PATCH*** /api_v2/library/{library_id}` 
-
-**Parameters**
-
-| Name | Located in | Description | Required | Type |
-| ---- | ---------- | ----------- | -------- | ---- |
-| library_id | path |  | Yes |  |
+> Example Usage: 
 
 ```python
 import requests
@@ -3510,7 +1801,7 @@ curl -X 'PATCH' \
 }'
 ```
 
-> The above request, on a successful request, returns JSON structured like this:
+> The above request, on success, returns JSON structured like this:
 
 ```json
 {
@@ -3530,6 +1821,17 @@ curl -X 'PATCH' \
 }
 ```
 
+**Description:** Update Library Details
+
+### HTTP Request 
+***PATCH*** request on `/api_v2/library/{library_id}` 
+
+**Parameters**
+
+| Name | Located in | Description | Required | Type |
+| ---- | ---------- | ----------- | -------- | ---- |
+| library_id | path |  | Yes |  |
+
 **Responses**
 
 | Code | Description |
@@ -3537,19 +1839,9 @@ curl -X 'PATCH' \
 | 200 | Successful Response |
 | 422 | Validation Error |
 
-## Delete Library By Id 
+## Delete Library
 
-**Summary:** Delete Library By Id
-
-### HTTP Request 
-`***DELETE*** /api_v2/library/{library_id}` 
-
-**Parameters**
-
-| Name | Located in | Description | Required | Type |
-| ---- | ---------- | ----------- | -------- | ---- |
-| library_id | path |  | Yes |  |
-| ignore_backend | query |  | No |  |
+> Example Usage: 
 
 ```python
 import requests
@@ -3621,11 +1913,23 @@ curl -X 'DELETE' \
   -H 'accept: */*'
 ```
 
-> The above request, on a successful request, returns JSON structured like this:
+> The above request, on success, returns JSON structured like this:
 
 ```json
 "string"
 ```
+
+**Description:** Delete Library By Id
+
+### HTTP Request 
+***DELETE*** request on `/api_v2/library/{library_id}` 
+
+**Parameters**
+
+| Name | Located in | Description | Required | Type |
+| ---- | ---------- | ----------- | -------- | ---- |
+| library_id | path |  | Yes |  |
+| ignore_backend | query |  | No |  |
 
 **Responses**
 
@@ -3634,174 +1938,9 @@ curl -X 'DELETE' \
 | 204 | Successful Response |
 | 422 | Validation Error |
 
-## Add User To Library 
-
-**Summary:** Add User To Library 
-
-### HTTP Request 
-`***POST*** /api_v2/library/{library_id}/add_user` 
-
-**Parameters**
-
-| Name | Located in | Description | Required | Type |
-| ---- | ---------- | ----------- | -------- | ---- |
-| library_id | path |  | Yes |  |
-
-```python
-import requests
-import json
-
-url = 'http://localhost/api_v2/library/123e4567-e89b-12d3-a456-426614174000/add_user'
-headers = {
-    'accept': 'application/json',
-    'Content-Type': 'application/json'
-}
-data = {
-    "is_admin": False,
-    "can_upload": True,
-    "email": "string"
-}
-
-response = requests.post(url, headers=headers, data=json.dumps(data))
-print(response.json())
-
-```
-
-```java
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
-public class Main {
-    public static void main(String[] args) {
-        try {
-            String url = "http://localhost/api_v2/library/123e4567-e89b-12d3-a456-426614174000/add_user";
-            URL obj = new URL(url);
-            HttpURLConnection con = (HttpURLConnection) obj.openConnection();
-            
-            con.setRequestMethod("POST");
-            con.setRequestProperty("Accept", "application/json");
-            con.setRequestProperty("Content-Type", "application/json");
-            con.setDoOutput(true); // Enable output to send a body
-
-            String jsonInputString = "{\"is_admin\": false, \"can_upload\": true, \"email\": \"string\"}";
-
-            try (OutputStream os = con.getOutputStream()) {
-                byte[] input = jsonInputString.getBytes("utf-8");
-                os.write(input, 0, input.length);           
-            }
-
-            int responseCode = con.getResponseCode();
-            System.out.println("Response Code: " + responseCode);
-            
-            if (responseCode == HttpURLConnection.HTTP_OK) {
-                BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-                String inputLine;
-                StringBuilder response = new StringBuilder();
-
-                while ((inputLine = in.readLine()) != null) {
-                    response.append(inputLine);
-                }
-                in.close();
-                
-                System.out.println(response.toString());
-            } else {
-                System.out.println("POST request failed. Response Code: " + responseCode);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-}
-
-```
-
-```javascript
-const url = 'http://localhost/api_v2/library/123e4567-e89b-12d3-a456-426614174000/add_user';
-
-const data = {
-  is_admin: false,
-  can_upload: true,
-  email: "string"
-};
-
-fetch(url, {
-  method: 'POST',
-  headers: {
-    'Accept': 'application/json',
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify(data)
-})
-  .then(response => {
-    if (!response.ok) {
-      throw new Error('Network response was not ok ' + response.statusText);
-    }
-    return response.json();
-  })
-  .then(data => console.log(data))
-  .catch(error => console.error('There was a problem with the fetch operation:', error));
-
-```
-
-```shell
-curl -X 'POST' \
-  'http://localhost/api_v2/library/123e4567-e89b-12d3-a456-426614174000/add_user' \
-  -H 'accept: application/json' \
-  -H 'Content-Type: application/json' \
-  -d '{
-  "is_admin": false,
-  "can_upload": true,
-  "email": "string"
-}'
-```
-
-> The above request, on a successful request, returns JSON structured like this:
-
-```json
-{
-  "library": {
-    "name": "string",
-    "desc": "string",
-    "public": true,
-    "default_contribute": true,
-    "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-    "workspace_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-    "group": {
-      "id": "string",
-      "name": "string",
-      "index_built": true,
-      "index_loaded": true,
-      "doc_processed_count": 0
-    }
-  },
-  "is_admin": true,
-  "can_upload": true,
-  "is_expert": true
-}
-```
-
-**Responses**
-
-| Code | Description |
-| ---- | ----------- |
-| 200 | Successful Response |
-| 422 | Validation Error |
-
 ## Get Library Users
 
-**Summary:** Get Library Users
-
-### HTTP Request 
-`***GET*** /api_v2/library/{library_id}/users` 
-
-**Parameters**
-
-| Name | Located in | Description | Required | Type |
-| ---- | ---------- | ----------- | -------- | ---- |
-| library_id | path |  | Yes |  |
+> Example Usage: 
 
 ```python
 import requests
@@ -3883,7 +2022,7 @@ curl -X 'GET' \
   -H 'accept: application/json'
 ```
 
-> The above request, on a successful request, returns JSON structured like this:
+> The above request, on success, returns JSON structured like this:
 
 ```json
 [
@@ -3903,132 +2042,16 @@ curl -X 'GET' \
 ]
 ```
 
-**Responses**
-
-| Code | Description |
-| ---- | ----------- |
-| 200 | Successful Response |
-| 422 | Validation Error |
-
-## Join Public Library
-
-**Summary:** Join Public Library
+**Description:** Get Library Users
 
 ### HTTP Request 
-`***POST*** /api_v2/library/{library_id}/join` 
+***GET*** request on `/api_v2/library/{library_id}/users` 
 
 **Parameters**
 
 | Name | Located in | Description | Required | Type |
 | ---- | ---------- | ----------- | -------- | ---- |
 | library_id | path |  | Yes |  |
-
-```python
-import requests
-
-url = 'http://localhost/api_v2/library/123e4567-e89b-12d3-a456-426614174000/join'
-headers = {
-    'accept': 'application/json'
-}
-
-response = requests.post(url, headers=headers)
-print(response.json())
-
-```
-
-```java
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
-public class Main {
-    public static void main(String[] args) {
-        try {
-            String url = "http://localhost/api_v2/library/123e4567-e89b-12d3-a456-426614174000/join";
-            URL obj = new URL(url);
-            HttpURLConnection con = (HttpURLConnection) obj.openConnection();
-            
-            con.setRequestMethod("POST");
-            con.setRequestProperty("Accept", "application/json");
-            con.setDoOutput(true); // Enable output to send a body
-
-            int responseCode = con.getResponseCode();
-            System.out.println("Response Code: " + responseCode);
-            
-            if (responseCode == HttpURLConnection.HTTP_OK) {
-                BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-                String inputLine;
-                StringBuilder response = new StringBuilder();
-
-                while ((inputLine = in.readLine()) != null) {
-                    response.append(inputLine);
-                }
-                in.close();
-                
-                System.out.println(response.toString());
-            } else {
-                System.out.println("POST request failed. Response Code: " + responseCode);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-}
-
-```
-
-```javascript
-const url = 'http://localhost/api_v2/library/123e4567-e89b-12d3-a456-426614174000/join';
-
-fetch(url, {
-  method: 'POST',
-  headers: {
-    'Accept': 'application/json'
-  }
-})
-  .then(response => {
-    if (!response.ok) {
-      throw new Error('Network response was not ok ' + response.statusText);
-    }
-    return response.json();
-  })
-  .then(data => console.log(data))
-  .catch(error => console.error('There was a problem with the fetch operation:', error));
-
-```
-
-```shell
-curl -X 'POST' \
-  'http://localhost/api_v2/library/123e4567-e89b-12d3-a456-426614174000/join' \
-  -H 'accept: application/json' \
-  -d ''
-```
-
-> The above request, on a successful request, returns JSON structured like this:
-
-```json
-{
-  "library": {
-    "name": "string",
-    "desc": "string",
-    "public": true,
-    "default_contribute": true,
-    "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-    "workspace_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-    "group": {
-      "id": "string",
-      "name": "string",
-      "index_built": true,
-      "index_loaded": true,
-      "doc_processed_count": 0
-    }
-  },
-  "is_admin": true,
-  "can_upload": true,
-  "is_expert": true
-}
-```
 
 **Responses**
 
@@ -4037,30 +2060,21 @@ curl -X 'POST' \
 | 200 | Successful Response |
 | 422 | Validation Error |
 
-## Remove User
+## Create Link
 
-**Summary:** Remove User
-
-### HTTP Request 
-`***POST*** /api_v2/library/{library_id}/remove_user` 
-
-**Parameters**
-
-| Name | Located in | Description | Required | Type |
-| ---- | ---------- | ----------- | -------- | ---- |
-| library_id | path |  | Yes |  |
+> Example Usage: 
 
 ```python
 import requests
 import json
 
-url = 'http://localhost/api_v2/library/123e4567-e89b-12d3-a456-426614174000/remove_user'
+url = 'http://localhost/api_v2/library/123e4567-e89b-12d3-a456-426614174000/link'
 headers = {
     'accept': 'application/json',
     'Content-Type': 'application/json'
 }
 data = {
-    "user_id": "string"
+    "url": "string"
 }
 
 response = requests.post(url, headers=headers, data=json.dumps(data))
@@ -4077,36 +2091,34 @@ import java.net.URL;
 
 public class Main {
     public static void main(String[] args) {
+        String url = "http://localhost/api_v2/library/123e4567-e89b-12d3-a456-426614174000/link";
+        String jsonInputString = "{\"url\": \"string\"}";
+
         try {
-            String url = "http://localhost/api_v2/library/123e4567-e89b-12d3-a456-426614174000/remove_user";
-            URL obj = new URL(url);
-            HttpURLConnection con = (HttpURLConnection) obj.openConnection();
-            
+            HttpURLConnection con = (HttpURLConnection) new URL(url).openConnection();
             con.setRequestMethod("POST");
             con.setRequestProperty("Accept", "application/json");
             con.setRequestProperty("Content-Type", "application/json");
-            con.setDoOutput(true); // Enable output to send a body
-
-            String jsonInputString = "{\"user_id\": \"string\"}";
+            con.setDoOutput(true);
 
             try (OutputStream os = con.getOutputStream()) {
                 byte[] input = jsonInputString.getBytes("utf-8");
-                os.write(input, 0, input.length);           
+                os.write(input, 0, input.length);
             }
 
             int responseCode = con.getResponseCode();
             System.out.println("Response Code: " + responseCode);
-            
+
             if (responseCode == HttpURLConnection.HTTP_OK) {
                 BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-                String inputLine;
                 StringBuilder response = new StringBuilder();
+                String inputLine;
 
                 while ((inputLine = in.readLine()) != null) {
                     response.append(inputLine);
                 }
                 in.close();
-                
+
                 System.out.println(response.toString());
             } else {
                 System.out.println("POST request failed. Response Code: " + responseCode);
@@ -4117,14 +2129,12 @@ public class Main {
     }
 }
 
-
 ```
 
 ```javascript
-const url = 'http://localhost/api_v2/library/123e4567-e89b-12d3-a456-426614174000/remove_user';
-
+const url = 'http://localhost/api_v2/library/123e4567-e89b-12d3-a456-426614174000/link';
 const data = {
-  user_id: "string"
+  url: "string"
 };
 
 fetch(url, {
@@ -4148,33 +2158,18 @@ fetch(url, {
 
 ```shell
 curl -X 'POST' \
-  'http://localhost/api_v2/library/123e4567-e89b-12d3-a456-426614174000/remove_user' \
+  'http://localhost/api_v2/library/123e4567-e89b-12d3-a456-426614174000/link' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
   -d '{
-  "user_id": "string"
+  "url": "string"
 }'
 ```
 
-> The above request, on a successful request, returns JSON structured like this:
-
-```json
-"string
-```
-
-**Responses**
-
-| Code | Description |
-| ---- | ----------- |
-| 200 | Successful Response |
-| 422 | Validation Error |
-
-## Edit User
-
-**Summary:** Edit User
+**Description:** Create Link
 
 ### HTTP Request 
-`***POST*** /api_v2/library/{library_id}/edit_user` 
+***POST*** request on `/api_v2/library/{library_id}/link` 
 
 **Parameters**
 
@@ -4182,142 +2177,18 @@ curl -X 'POST' \
 | ---- | ---------- | ----------- | -------- | ---- |
 | library_id | path |  | Yes |  |
 
-```python
-import requests
-import json
-
-url = 'http://localhost/api_v2/library/123e4567-e89b-12d3-a456-426614174000/edit_user'
-headers = {
-    'accept': 'application/json',
-    'Content-Type': 'application/json'
-}
-data = {
-    "user_id": "string",
-    "is_admin": True,
-    "can_upload": True
-}
-
-response = requests.post(url, headers=headers, data=json.dumps(data))
-print(response.json())
-
-```
-
-```java
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
-public class Main {
-    public static void main(String[] args) {
-        try {
-            String url = "http://localhost/api_v2/library/123e4567-e89b-12d3-a456-426614174000/edit_user";
-            URL obj = new URL(url);
-            HttpURLConnection con = (HttpURLConnection) obj.openConnection();
-            
-            con.setRequestMethod("POST");
-            con.setRequestProperty("Accept", "application/json");
-            con.setRequestProperty("Content-Type", "application/json");
-            con.setDoOutput(true); // Enable output to send a body
-
-            String jsonInputString = "{\"user_id\": \"string\", \"is_admin\": true, \"can_upload\": true}";
-
-            try (OutputStream os = con.getOutputStream()) {
-                byte[] input = jsonInputString.getBytes("utf-8");
-                os.write(input, 0, input.length);           
-            }
-
-            int responseCode = con.getResponseCode();
-            System.out.println("Response Code: " + responseCode);
-            
-            if (responseCode == HttpURLConnection.HTTP_OK) {
-                BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-                String inputLine;
-                StringBuilder response = new StringBuilder();
-
-                while ((inputLine = in.readLine()) != null) {
-                    response.append(inputLine);
-                }
-                in.close();
-                
-                System.out.println(response.toString());
-            } else {
-                System.out.println("POST request failed. Response Code: " + responseCode);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-}
-
-```
-
-```javascript
-const url = 'http://localhost/api_v2/library/123e4567-e89b-12d3-a456-426614174000/edit_user';
-
-const data = {
-  user_id: "string",
-  is_admin: true,
-  can_upload: true
-};
-
-fetch(url, {
-  method: 'POST',
-  headers: {
-    'Accept': 'application/json',
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify(data)
-})
-  .then(response => {
-    if (!response.ok) {
-      throw new Error('Network response was not ok ' + response.statusText);
-    }
-    return response.json();
-  })
-  .then(data => console.log(data))
-  .catch(error => console.error('There was a problem with the fetch operation:', error));
-
-```
-
-```shell
-curl -X 'POST' \
-  'http://localhost/api_v2/library/123e4567-e89b-12d3-a456-426614174000/edit_user' \
-  -H 'accept: application/json' \
-  -H 'Content-Type: application/json' \
-  -d '{
-  "user_id": "string",
-  "is_admin": true,
-  "can_upload": true
-}'
-```
-
-> The above request, on a successful request, returns JSON structured like this:
-
-```json
-"string
-```
-
 **Responses**
 
 | Code | Description |
 | ---- | ----------- |
-| 200 | Successful Response |
+| 201 | Successful Response |
 | 422 | Validation Error |
+
+# Document API 
 
 ## Create Document
 
-**Summary:** Create Document
-
-### HTTP Request 
-`***POST*** /api_v2/library/{library_id}/file` 
-
-**Parameters**
-
-| Name | Located in | Description | Required | Type |
-| ---- | ---------- | ----------- | -------- | ---- |
-| library_id | path |  | Yes |  |
+> Example Usage: 
 
 ```python
 import requests
@@ -4437,7 +2308,7 @@ curl -X 'POST' \
   -F 'file=@openapi.yaml'
 ```
 
-> The above request, on a successful request, returns JSON structured like this:
+> The above request, on success, returns JSON structured like this:
 
 ```json
 {
@@ -4467,19 +2338,10 @@ curl -X 'POST' \
 }
 ```
 
-**Responses**
-
-| Code | Description |
-| ---- | ----------- |
-| 201 | Successful Response |
-| 422 | Validation Error |
-
-## Create Link
-
-**Summary:** Create Link
+**Description:** Create Document
 
 ### HTTP Request 
-`***POST*** /api_v2/library/{library_id}/link` 
+***POST*** request on `/api_v2/library/{library_id}/file` 
 
 **Parameters**
 
@@ -4487,65 +2349,66 @@ curl -X 'POST' \
 | ---- | ---------- | ----------- | -------- | ---- |
 | library_id | path |  | Yes |  |
 
+**Responses**
+
+| Code | Description |
+| ---- | ----------- |
+| 201 | Successful Response |
+| 422 | Validation Error |
+
+## Delete Document
+
+> Example Usage: 
+
 ```python
 import requests
-import json
 
-url = 'http://localhost/api_v2/library/123e4567-e89b-12d3-a456-426614174000/link'
+url = 'http://localhost/api_v2/document/7650e878-ec84-44f0-b7b9-c068f67bb41b/delete'
 headers = {
     'accept': 'application/json',
-    'Content-Type': 'application/json'
-}
-data = {
-    "url": "string"
+    'Authorization': 'Bearer <auth-token>'
 }
 
-response = requests.post(url, headers=headers, data=json.dumps(data))
-print(response.json())
+response = requests.delete(url, headers=headers)
+print(response.status_code)
+print(response.text)  # If needed, print the response body
 
 ```
 
 ```java
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
-import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 
 public class Main {
     public static void main(String[] args) {
-        String url = "http://localhost/api_v2/library/123e4567-e89b-12d3-a456-426614174000/link";
-        String jsonInputString = "{\"url\": \"string\"}";
+        String url = "http://localhost/api_v2/document/7650e878-ec84-44f0-b7b9-c068f67bb41b/delete";
 
         try {
             HttpURLConnection con = (HttpURLConnection) new URL(url).openConnection();
-            con.setRequestMethod("POST");
+            con.setRequestMethod("DELETE");
             con.setRequestProperty("Accept", "application/json");
-            con.setRequestProperty("Content-Type", "application/json");
-            con.setDoOutput(true);
-
-            try (OutputStream os = con.getOutputStream()) {
-                byte[] input = jsonInputString.getBytes("utf-8");
-                os.write(input, 0, input.length);
-            }
+            con.setRequestProperty("Authorization", "Bearer <auth-token>");
 
             int responseCode = con.getResponseCode();
             System.out.println("Response Code: " + responseCode);
 
-            if (responseCode == HttpURLConnection.HTTP_OK) {
-                BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-                StringBuilder response = new StringBuilder();
-                String inputLine;
+            BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
+            String inputLine;
+            StringBuilder content = new StringBuilder();
 
-                while ((inputLine = in.readLine()) != null) {
-                    response.append(inputLine);
-                }
-                in.close();
-
-                System.out.println(response.toString());
-            } else {
-                System.out.println("POST request failed. Response Code: " + responseCode);
+            while ((inputLine = in.readLine()) != null) {
+                content.append(inputLine);
             }
+
+            // Close connections
+            in.close();
+            con.disconnect();
+
+            // Print result
+            System.out.println(content.toString());
+
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -4555,176 +2418,44 @@ public class Main {
 ```
 
 ```javascript
-const url = 'http://localhost/api_v2/library/123e4567-e89b-12d3-a456-426614174000/link';
-const data = {
-  url: "string"
+const url = 'http://localhost/api_v2/document/7650e878-ec84-44f0-b7b9-c068f67bb41b/delete';
+
+const headers = {
+  'Accept': 'application/json',
+  'Authorization': 'Bearer <auth-token>'
 };
 
 fetch(url, {
-  method: 'POST',
-  headers: {
-    'Accept': 'application/json',
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify(data)
+  method: 'DELETE',
+  headers: headers
 })
   .then(response => {
-    if (!response.ok) {
-      throw new Error('Network response was not ok ' + response.statusText);
-    }
-    return response.json();
+    console.log('Response Code:', response.status);
+    return response.text();  // If you need to print the response body
   })
   .then(data => console.log(data))
-  .catch(error => console.error('There was a problem with the fetch operation:', error));
+  .catch(error => console.error('Error:', error));
 
 ```
 
 ```shell
-curl -X 'POST' \
-  'http://localhost/api_v2/library/123e4567-e89b-12d3-a456-426614174000/link' \
+curl -X 'DELETE' \
+  'http://localhost/api_v2/document/7650e878-ec84-44f0-b7b9-c068f67bb41b/delete' \
   -H 'accept: application/json' \
-  -H 'Content-Type: application/json' \
-  -d '{
-  "url": "string"
-}'
+  -H 'Authorization: Bearer <auth-token>'
+
 ```
 
-**Responses**
-
-| Code | Description |
-| ---- | ----------- |
-| 201 | Successful Response |
-| 422 | Validation Error |
-
-## Get Documents By Library
-
-**Summary:** Get Documents By Library 
+**Description:** Delete Document
 
 ### HTTP Request 
-`***GET*** /api_v2/library/{library_id}/documents` 
+***DELETE*** request on `/api_v2/document/{doc_id}/delete` 
 
 **Parameters**
 
 | Name | Located in | Description | Required | Type |
 | ---- | ---------- | ----------- | -------- | ---- |
-| library_id | path |  | Yes |  |
-| skip | query |  | No |  |
-| limit | query |  | No |  |
-
-```python
-import requests
-
-url = 'http://localhost/api_v2/library/123e4567-e89b-12d3-a456-426614174000/documents?skip=0&limit=100'
-headers = {
-    'accept': 'application/json'
-}
-
-response = requests.get(url, headers=headers)
-print(response.json())
-
-```
-
-```java
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
-public class Main {
-    public static void main(String[] args) {
-        String url = "http://localhost/api_v2/library/123e4567-e89b-12d3-a456-426614174000/documents?skip=0&limit=100";
-
-        try {
-            HttpURLConnection con = (HttpURLConnection) new URL(url).openConnection();
-            con.setRequestMethod("GET");
-            con.setRequestProperty("Accept", "application/json");
-
-            int responseCode = con.getResponseCode();
-            System.out.println("Response Code: " + responseCode);
-
-            if (responseCode == HttpURLConnection.HTTP_OK) {
-                BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-                StringBuilder response = new StringBuilder();
-                String inputLine;
-
-                while ((inputLine = in.readLine()) != null) {
-                    response.append(inputLine);
-                }
-                in.close();
-
-                System.out.println(response.toString());
-            } else {
-                System.out.println("GET request failed. Response Code: " + responseCode);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-}
-
-```
-
-```javascript
-const url = 'http://localhost/api_v2/library/123e4567-e89b-12d3-a456-426614174000/documents?skip=0&limit=100';
-
-fetch(url, {
-  method: 'GET',
-  headers: {
-    'Accept': 'application/json'
-  }
-})
-  .then(response => {
-    if (!response.ok) {
-      throw new Error('Network response was not ok ' + response.statusText);
-    }
-    return response.json();
-  })
-  .then(data => console.log(data))
-  .catch(error => console.error('There was a problem with the fetch operation:', error));
-
-```
-
-```shell
-curl -X 'GET' \
-  'http://localhost/api_v2/library/123e4567-e89b-12d3-a456-426614174000/documents?skip=0&limit=100' \
-  -H 'accept: application/json'
-```
-
-> The above request, on a successful request, returns JSON structured like this:
-
-```json
-{
-  "documents": [
-    {
-      "name": "string",
-      "document_type": "string",
-      "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-      "library_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-      "document_url": "string",
-      "s3_key": "string",
-      "doc_metadata": "string",
-      "document": {
-        "id": "string",
-        "file_name": "string",
-        "file_path": "string",
-        "save_name": "string",
-        "s3_path": "string",
-        "status": "string",
-        "md5_hash": "string",
-        "parsed": true,
-        "page_count": 0,
-        "para_count": 0,
-        "word_count": 0,
-        "char_count": 0,
-        "file_size": "string",
-        "doc_processed_version": "string"
-      }
-    }
-  ],
-  "count": 0,
-  "page_count": 0
-}
-```
+| doc_id | path |  | Yes |  |
 
 **Responses**
 
@@ -4733,18 +2464,233 @@ curl -X 'GET' \
 | 200 | Successful Response |
 | 422 | Validation Error |
 
-## Create New Transaction
+## Update Document
 
-**Summary:** Create New Transaction
+> Example Usage: 
+
+```python
+import requests
+
+url = 'http://localhost/api_v2/document/7650e878-ec84-44f0-b7b9-c068f67bb41b/update?name=name'
+headers = {
+    'accept': 'application/json',
+    'Authorization': 'Bearer <auth-token>'
+}
+
+response = requests.post(url, headers=headers)
+print(response.status_code)
+print(response.text)  # If needed, print the response body
+```
+
+```java
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+
+public class Main {
+    public static void main(String[] args) {
+        String url = "http://localhost/api_v2/document/7650e878-ec84-44f0-b7b9-c068f67bb41b/update?name=name";
+
+        try {
+            HttpURLConnection con = (HttpURLConnection) new URL(url).openConnection();
+            con.setRequestMethod("POST");
+            con.setRequestProperty("Accept", "application/json");
+            con.setRequestProperty("Authorization", "Bearer <auth-token>");
+
+            int responseCode = con.getResponseCode();
+            System.out.println("Response Code: " + responseCode);
+
+            BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
+            String inputLine;
+            StringBuilder content = new StringBuilder();
+
+            while ((inputLine = in.readLine()) != null) {
+                content.append(inputLine);
+            }
+
+            // Close connections
+            in.close();
+            con.disconnect();
+
+            // Print result
+            System.out.println(content.toString());
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+}
+
+```
+
+```javascript
+const url = 'http://localhost/api_v2/document/7650e878-ec84-44f0-b7b9-c068f67bb41b/update?name=name';
+
+const headers = {
+  'Accept': 'application/json',
+  'Authorization': 'Bearer <auth-token>'
+};
+
+fetch(url, {
+  method: 'POST',
+  headers: headers
+})
+  .then(response => {
+    console.log('Response Code:', response.status);
+    return response.text();  // If you need to print the response body
+  })
+  .then(data => console.log(data))
+  .catch(error => console.error('Error:', error));
+
+```
+
+```shell
+curl -X 'POST' \
+  'http://localhost/api_v2/document/7650e878-ec84-44f0-b7b9-c068f67bb41b/update?name=name' \
+  -H 'accept: application/json' \
+  -H 'Authorization: Bearer <auth-token>' \
+  -d ''
+
+```
+
+**Description:** Update Document
 
 ### HTTP Request 
-`***POST*** /api_v2/library/{library_id}/transaction` 
+***POST*** request on `/api_v2/document/{doc_id}/update` 
 
 **Parameters**
 
 | Name | Located in | Description | Required | Type |
 | ---- | ---------- | ----------- | -------- | ---- |
-| library_id | path |  | Yes |  |
+| doc_id | path |  | Yes |  |
+| name | query |  | Yes |  |
+
+**Responses**
+
+| Code | Description |
+| ---- | ----------- |
+| 200 | Successful Response |
+| 422 | Validation Error |
+
+## Get Document By Page
+
+> Example Usage: 
+
+```python
+import requests
+
+url = 'http://localhost/api_v2/document/7650e878-ec84-44f0-b7b9-c068f67bb41b/page?page=3&answer_id=7650e878-ec84-44f0-b7b9-c068f67bb41b'
+headers = {
+    'accept': '*/*',
+    'Authorization': 'Bearer <auth-token>'
+}
+
+response = requests.get(url, headers=headers)
+print(response.status_code)
+print(response.text)  # If needed, print the response body
+
+```
+
+```java
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+
+public class Main {
+    public static void main(String[] args) {
+        String url = "http://localhost/api_v2/document/7650e878-ec84-44f0-b7b9-c068f67bb41b/page?page=3&answer_id=7650e878-ec84-44f0-b7b9-c068f67bb41b";
+
+        try {
+            HttpURLConnection con = (HttpURLConnection) new URL(url).openConnection();
+            con.setRequestMethod("GET");
+            con.setRequestProperty("Accept", "*/*");
+            con.setRequestProperty("Authorization", "Bearer <auth-token>");
+
+            int responseCode = con.getResponseCode();
+            System.out.println("Response Code: " + responseCode);
+
+            BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
+            String inputLine;
+            StringBuilder content = new StringBuilder();
+
+            while ((inputLine = in.readLine()) != null) {
+                content.append(inputLine);
+            }
+
+            // Close connections
+            in.close();
+            con.disconnect();
+
+            // Print result
+            System.out.println(content.toString());
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+}
+
+```
+
+```javascript
+const url = 'http://localhost/api_v2/document/7650e878-ec84-44f0-b7b9-c068f67bb41b/page?page=3&answer_id=7650e878-ec84-44f0-b7b9-c068f67bb41b';
+
+const headers = {
+  'Accept': '*/*',
+  'Authorization': 'Bearer <auth-token>'
+};
+
+fetch(url, {
+  method: 'GET',
+  headers: headers
+})
+  .then(response => {
+    console.log('Response Code:', response.status);
+    return response.text();  // If you need to print the response body
+  })
+  .then(data => console.log(data))
+  .catch(error => console.error('Error:', error));
+
+```
+
+```shell
+curl -X 'GET' \
+  'http://localhost/api_v2/document/7650e878-ec84-44f0-b7b9-c068f67bb41b/page?page=3&answer_id=7650e878-ec84-44f0-b7b9-c068f67bb41b' \
+  -H 'accept: */*' \
+  -H 'Authorization: Bearer <auth-token>'
+
+```
+
+**Description:** Get Document
+
+### HTTP Request 
+***GET*** request on `/api_v2/document/{doc_id}/page` 
+
+**Parameters**
+
+| Name | Located in | Description | Required | Type |
+| ---- | ---------- | ----------- | -------- | ---- |
+| doc_id | path |  | Yes |  |
+| page | query |  | No |  |
+| answer_id | query |  | No |  |
+
+**Responses**
+
+| Code | Description |
+| ---- | ----------- |
+| 200 | Successful Response |
+| 422 | Validation Error |
+
+
+
+# Transaction API 
+
+## Create New Transaction
+
+
+> Example Usage: 
 
 ```python
 import requests
@@ -4854,7 +2800,7 @@ curl -X 'POST' \
 }'
 ```
 
-> The above request, on a successful request, returns JSON structured like this:
+> The above request, on success, returns JSON structured like this:
 
 ```json
 {
@@ -4900,2578 +2846,22 @@ curl -X 'POST' \
 }
 ```
 
+**Description:** Create New Transaction
+
+### HTTP Request 
+***POST*** request for `/api_v2/library/{library_id}/transaction` 
+
+**Parameters**
+
+| Name | Located in | Description | Required | Type |
+| ---- | ---------- | ----------- | -------- | ---- |
+| library_id | path |  | Yes |  |
+
 **Responses**
+
 
 | Code | Description |
 | ---- | ----------- |
 | 201 | Successful Response |
-| 422 | Validation Error |
-
-# Transaction API
-## Generate Text
-
-**Summary:** Generate Text
-
-### HTTP Request 
-`***POST*** /api_v2/transaction/generate_text/{transaction_id}` 
-
-**Parameters**
-
-| Name | Located in | Description | Required | Type |
-| ---- | ---------- | ----------- | -------- | ---- |
-| transaction_id | path |  | Yes |  |
-
-```python
-import requests
-import json
-
-url = 'http://localhost/api_v2/transaction/generate_text/123e4567-e89b-12d3-a456-426614174000'
-headers = {
-    'accept': 'application/json',
-    'Content-Type': 'application/json'
-}
-data = {
-    "transaction_ids": [],
-    "qa_task": ("Based on the retrieved contexts generate a detailed response to user prompt with in-text citations. "
-                "give explanations wherever applicable.\nMake sure to include in-text citations after every 1-2 sentence as '[x]'. "
-                "x being the context number from which the information is used. Respond in Markdown format when applicable, "
-                "use appropriate markdown syntax for formatting like headings (#, ##, ...), bold, italics etc.\n"
-                "If question / user prompt cannot be answered by the contexts, return 'I am unable to answer question based on fetched information'. "
-                "Don't try to make up an answer.")
-}
-
-response = requests.post(url, headers=headers, data=json.dumps(data))
-print(response.json())
-
-```
-
-```java
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
-public class Main {
-    public static void main(String[] args) {
-        String url = "http://localhost/api_v2/transaction/generate_text/123e4567-e89b-12d3-a456-426614174000";
-        String jsonInputString = "{\"transaction_ids\": [], \"qa_task\": \"Based on the retrieved contexts generate a detailed response to user prompt with in-text citations. give explanations wherever applicable.\\nMake sure to include in-text citations after every 1-2 sentence as '[x]'. x being the context number from which the information is used. Respond in Markdown format when applicable, use appropriate markdown syntax for formatting like headings (#, ##, ...), bold, italics etc.\\nIf question / user prompt cannot be answered by the contexts, return 'I am unable to answer question based on fetched information'. Don't try to make up an answer.\"}";
-
-        try {
-            HttpURLConnection con = (HttpURLConnection) new URL(url).openConnection();
-            con.setRequestMethod("POST");
-            con.setRequestProperty("Accept", "application/json");
-            con.setRequestProperty("Content-Type", "application/json");
-            con.setDoOutput(true);
-
-            try (OutputStream os = con.getOutputStream()) {
-                byte[] input = jsonInputString.getBytes("utf-8");
-                os.write(input, 0, input.length);
-            }
-
-            int responseCode = con.getResponseCode();
-            System.out.println("Response Code: " + responseCode);
-
-            if (responseCode == HttpURLConnection.HTTP_OK) {
-                BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-                StringBuilder response = new StringBuilder();
-                String inputLine;
-
-                while ((inputLine = in.readLine()) != null) {
-                    response.append(inputLine);
-                }
-                in.close();
-
-                System.out.println(response.toString());
-            } else {
-                System.out.println("POST request failed. Response Code: " + responseCode);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-}
-
-```
-
-```javascript
-const url = 'http://localhost/api_v2/transaction/generate_text/123e4567-e89b-12d3-a456-426614174000';
-const data = {
-  transaction_ids: [],
-  qa_task: "Based on the retrieved contexts generate a detailed response to user prompt with in-text citations. " +
-           "give explanations wherever applicable.\nMake sure to include in-text citations after every 1-2 sentence as '[x]'. " +
-           "x being the context number from which the information is used. Respond in Markdown format when applicable, " +
-           "use appropriate markdown syntax for formatting like headings (#, ##, ...), bold, italics etc.\n" +
-           "If question / user prompt cannot be answered by the contexts, return 'I am unable to answer question based on fetched information'. " +
-           "Don't try to make up an answer."
-};
-
-fetch(url, {
-  method: 'POST',
-  headers: {
-    'Accept': 'application/json',
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify(data)
-})
-  .then(response => {
-    if (!response.ok) {
-      throw new Error('Network response was not ok ' + response.statusText);
-    }
-    return response.json();
-  })
-  .then(data => console.log(data))
-  .catch(error => console.error('There was a problem with the fetch operation:', error));
-
-```
-
-```shell
-curl -X 'POST' \
-  'http://localhost/api_v2/transaction/generate_text/123e4567-e89b-12d3-a456-426614174000' \
-  -H 'accept: application/json' \
-  -H 'Content-Type: application/json' \
-  -d '{
-  "transaction_ids": [],
-  "qa_task": "Based on the retrieved contexts generate a detailed response to user prompt with in-text citations. give explainations whereever applicable.\nMake sure to include in-text citations after every 1-2 sentence as '\''[x]'\''. x being the context number from which the information is used. Respond in Markdown format when applicable, use appropriate markdown syntax for formatting like headings (#, ##, ...), bold, italics etc.\nIf question / user prompt cannot be answered by the contexts, return '\''I am unable to answer question based on fetched information'\''. Don'\''t try to make up an answer."
-}'
-```
-
-> The above request, on a successful request, returns JSON structured like this:
-
-```json
-{
-  "transaction_id": "transaction_id",
-  "generated_text": "Based on your context, this is the generated text"
-}
-```
-
-**Responses**
-
-| Code | Description |
-| ---- | ----------- |
-| 201 | Generate text based on transaction as context |
-| 422 | Validation Error |
-
-## Update Transaction
-
-**Summary:** Update
-
-### HTTP Request 
-`***PATCH*** /api_v2/transaction/update_answer/{transaction_id}` 
-
-**Parameters**
-
-| Name | Located in | Description | Required | Type |
-| ---- | ---------- | ----------- | -------- | ---- |
-| transaction_id | path |  | Yes |  |
-| generated_response | query |  | Yes |  |
-
-```python
-import requests
-
-url = 'http://localhost/api_v2/transaction/update_answer/123e4567-e89b-12d3-a456-426614174000'
-params = {
-    'generated_response': '{generated_response}'
-}
-headers = {
-    'accept': 'application/json'
-}
-
-response = requests.patch(url, headers=headers, params=params)
-print(response.json())
-
-```
-
-```java
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
-public class Main {
-    public static void main(String[] args) {
-        String url = "http://localhost/api_v2/transaction/update_answer/123e4567-e89b-12d3-a456-426614174000?generated_response=%7Bgenerated_response%7D";
-
-        try {
-            HttpURLConnection con = (HttpURLConnection) new URL(url).openConnection();
-            con.setRequestMethod("PATCH");
-            con.setRequestProperty("Accept", "application/json");
-            con.setDoOutput(true);
-
-            int responseCode = con.getResponseCode();
-            System.out.println("Response Code: " + responseCode);
-
-            if (responseCode == HttpURLConnection.HTTP_OK) {
-                BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-                StringBuilder response = new StringBuilder();
-                String inputLine;
-
-                while ((inputLine = in.readLine()) != null) {
-                    response.append(inputLine);
-                }
-                in.close();
-
-                System.out.println(response.toString());
-            } else {
-                System.out.println("PATCH request failed. Response Code: " + responseCode);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-}
-
-```
-
-```javascript
-const url = 'http://localhost/api_v2/transaction/update_answer/123e4567-e89b-12d3-a456-426614174000';
-const params = new URLSearchParams({
-  generated_response: '{generated_response}'
-});
-
-fetch(`${url}?${params}`, {
-  method: 'PATCH',
-  headers: {
-    'Accept': 'application/json'
-  }
-})
-  .then(response => {
-    if (!response.ok) {
-      throw new Error('Network response was not ok ' + response.statusText);
-    }
-    return response.json();
-  })
-  .then(data => console.log(data))
-  .catch(error => console.error('There was a problem with the fetch operation:', error));
-
-```
-
-```shell
-curl -X 'PATCH' \
-  'http://localhost/api_v2/transaction/update_answer/123e4567-e89b-12d3-a456-426614174000?generated_response=%7Bgenerated_response%7D' \
-  -H 'accept: application/json'
-```
-
-> The above request, on a successful request, returns JSON structured like this:
-
-```json
-{
-  "query_string": "string",
-  "user_id": "string",
-  "response_type": "string",
-  "time_taken": "string",
-  "augmented_query": "string",
-  "generated_answer": "",
-  "answers": [
-    {
-      "transaction_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-      "page_no": 0,
-      "answer": "string",
-      "highlights": "string",
-      "long_answer": "",
-      "phrase_start_pos": -1,
-      "phrase_end_pos": -1,
-      "phrase_start_pos_long": -1,
-      "phrase_end_pos_long": -1,
-      "doc_metadata": "",
-      "score": 0,
-      "document_clicked": false,
-      "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-      "document": {
-        "name": "string",
-        "document_type": "",
-        "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-        "upload_date": "2024-10-07T22:33:20.031Z",
-        "document_url": "string",
-        "s3_key": "string",
-        "document_id": "string",
-        "library_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-        "account_id": "string",
-        "doc_metadata": ""
-      }
-    }
-  ],
-  "timestamp": "2024-10-07T22:33:20.031Z",
-  "resolution_status": true,
-  "feedback": "string",
-  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
-}
-```
-
-**Responses**
-
-| Code | Description |
-| ---- | ----------- |
-| 200 | Successful Response |
-| 422 | Validation Error |
-
-## Pull Transactions
-
-**Summary:** Pull Transactions
-
-### HTTP Request 
-`***GET*** /api_v2/transaction/` 
-
-**Parameters**
-
-| Name | Located in | Description | Required | Type |
-| ---- | ---------- | ----------- | -------- | ---- |
-| library_id | query |  | Yes |  |
-| recent | query |  | Yes |  |
-| last_transaction_id | query |  | No |  |
-
-```python
-import requests
-
-url = 'http://localhost/api_v2/transaction/'
-params = {
-    'library_id': '123e4567-e89b-12d3-a456-426614174000',
-    'recent': 5,
-    'last_transaction_id': '123e4567-e89b-12d3-a456-426614174000'
-}
-headers = {
-    'accept': 'application/json'
-}
-
-response = requests.get(url, headers=headers, params=params)
-print(response.json())
-
-```
-
-```java
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
-public class Main {
-    public static void main(String[] args) {
-        String url = "http://localhost/api_v2/transaction/?library_id=123e4567-e89b-12d3-a456-426614174000&recent=5&last_transaction_id=123e4567-e89b-12d3-a456-426614174000";
-
-        try {
-            HttpURLConnection con = (HttpURLConnection) new URL(url).openConnection();
-            con.setRequestMethod("GET");
-            con.setRequestProperty("Accept", "application/json");
-
-            int responseCode = con.getResponseCode();
-            System.out.println("Response Code: " + responseCode);
-
-            if (responseCode == HttpURLConnection.HTTP_OK) {
-                BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-                StringBuilder response = new StringBuilder();
-                String inputLine;
-
-                while ((inputLine = in.readLine()) != null) {
-                    response.append(inputLine);
-                }
-                in.close();
-
-                System.out.println(response.toString());
-            } else {
-                System.out.println("GET request failed. Response Code: " + responseCode);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-}
-
-```
-
-```javascript
-const url = 'http://localhost/api_v2/transaction/';
-const params = new URLSearchParams({
-  library_id: '123e4567-e89b-12d3-a456-426614174000',
-  recent: 5,
-  last_transaction_id: '123e4567-e89b-12d3-a456-426614174000'
-});
-
-fetch(`${url}?${params}`, {
-  method: 'GET',
-  headers: {
-    'Accept': 'application/json'
-  }
-})
-  .then(response => {
-    if (!response.ok) {
-      throw new Error('Network response was not ok ' + response.statusText);
-    }
-    return response.json();
-  })
-  .then(data => console.log(data))
-  .catch(error => console.error('There was a problem with the fetch operation:', error));
-
-```
-
-```shell
-curl -X 'GET' \
-  'http://localhost/api_v2/transaction/?library_id=123e4567-e89b-12d3-a456-426614174000&recent=5&last_transaction_id=123e4567-e89b-12d3-a456-426614174000' \
-  -H 'accept: application/json'
-```
-
-> The above request, on a successful request, returns JSON structured like this:
-
-```json
-
-  {
-    "query_string": "string",
-    "user_id": "string",
-    "response_type": "string",
-    "time_taken": "string",
-    "augmented_query": "string",
-    "generated_answer": "",
-    "answers": [
-      {
-        "transaction_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-        "page_no": 0,
-        "answer": "string",
-        "highlights": "string",
-        "long_answer": "",
-        "phrase_start_pos": -1,
-        "phrase_end_pos": -1,
-        "phrase_start_pos_long": -1,
-        "phrase_end_pos_long": -1,
-        "doc_metadata": "",
-        "score": 0,
-        "document_clicked": false,
-        "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-        "document": {
-          "name": "string",
-          "document_type": "",
-          "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-          "upload_date": "2024-10-07T22:33:40.535Z",
-          "document_url": "string",
-          "s3_key": "string",
-          "document_id": "string",
-          "library_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-          "account_id": "string",
-          "doc_metadata": ""
-        }
-      }
-    ],
-    "timestamp": "2024-10-07T22:33:40.535Z",
-    "resolution_status": true,
-    "feedback": "string",
-    "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
-  }
-]
-```
-
-**Responses**
-
-| Code | Description |
-| ---- | ----------- |
-| 200 | Successful Response |
-| 422 | Validation Error |
-
-# Feedback
-## Submit Feedback
-
-**Summary:** Submit Feedback
-
-### HTTP Request 
-`***POST*** /api_v2/feedback/` 
-
-```python
-import requests
-import json
-
-url = 'http://localhost/api_v2/feedback/'
-data = {
-    "feedback_type": "string",
-    "transaction_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
-}
-headers = {
-    'accept': 'application/json',
-    'Content-Type': 'application/json'
-}
-
-response = requests.post(url, headers=headers, data=json.dumps(data))
-print(response.json())
-
-```
-
-```java
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
-public class Main {
-    public static void main(String[] args) {
-        String url = "http://localhost/api_v2/feedback/";
-        String jsonInputString = "{\"feedback_type\": \"string\", \"transaction_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\"}";
-
-        try {
-            HttpURLConnection con = (HttpURLConnection) new URL(url).openConnection();
-            con.setRequestMethod("POST");
-            con.setRequestProperty("Accept", "application/json");
-            con.setRequestProperty("Content-Type", "application/json");
-            con.setDoOutput(true);
-
-            try (OutputStream os = con.getOutputStream()) {
-                byte[] input = jsonInputString.getBytes("utf-8");
-                os.write(input, 0, input.length);
-            }
-
-            int responseCode = con.getResponseCode();
-            System.out.println("Response Code: " + responseCode);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-}
-
-```
-
-```javascript
-const url = 'http://localhost/api_v2/feedback/';
-const data = {
-  feedback_type: 'string',
-  transaction_id: '3fa85f64-5717-4562-b3fc-2c963f66afa6'
-};
-
-fetch(url, {
-  method: 'POST',
-  headers: {
-    'Accept': 'application/json',
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify(data)
-})
-  .then(response => {
-    if (!response.ok) {
-      throw new Error('Network response was not ok ' + response.statusText);
-    }
-    return response.json();
-  })
-  .then(data => console.log(data))
-  .catch(error => console.error('There was a problem with the fetch operation:', error));
-
-```
-
-```shell
-curl -X 'POST' \
-  'http://localhost/api_v2/feedback/' \
-  -H 'accept: application/json' \
-  -H 'Content-Type: application/json' \
-  -d '{
-  "feedback_type": "string",
-  "transaction_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
-}'
-```
-
-**Responses**
-
-| Code | Description |
-| ---- | ----------- |
-| 200 | Successful Response |
-| 422 | Validation Error |
-
-## Read Feedback
-
-**Summary:** Read Feedback
-
-### HTTP Request 
-`***GET*** /api_v2/feedback/feedback/{transaction_id}` 
-
-**Parameters**
-
-| Name | Located in | Description | Required | Type |
-| ---- | ---------- | ----------- | -------- | ---- |
-| transaction_id | path |  | Yes |  |
-
-```python
-import requests
-
-url = 'http://localhost/api_v2/feedback/feedback/123e4567-e89b-12d3-a456-426614174000'
-headers = {
-    'accept': 'application/json'
-}
-
-response = requests.get(url, headers=headers)
-print(response.json())
-
-```
-
-```java
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
-public class Main {
-    public static void main(String[] args) {
-        String url = "http://localhost/api_v2/feedback/feedback/123e4567-e89b-12d3-a456-426614174000";
-
-        try {
-            HttpURLConnection con = (HttpURLConnection) new URL(url).openConnection();
-            con.setRequestMethod("GET");
-            con.setRequestProperty("Accept", "application/json");
-
-            int responseCode = con.getResponseCode();
-            System.out.println("Response Code: " + responseCode);
-
-            BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-            String inputLine;
-            StringBuilder response = new StringBuilder();
-
-            while ((inputLine = in.readLine()) != null) {
-                response.append(inputLine);
-            }
-            in.close();
-
-            System.out.println(response.toString());
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-}
-
-```
-
-```javascript
-const url = 'http://localhost/api_v2/feedback/feedback/123e4567-e89b-12d3-a456-426614174000';
-
-fetch(url, {
-  method: 'GET',
-  headers: {
-    'Accept': 'application/json'
-  }
-})
-  .then(response => {
-    if (!response.ok) {
-      throw new Error('Network response was not ok ' + response.statusText);
-    }
-    return response.json();
-  })
-  .then(data => console.log(data))
-  .catch(error => console.error('There was a problem with the fetch operation:', error));
-
-```
-
-```shell
-curl -X 'GET' \
-  'http://localhost/api_v2/feedback/feedback/123e4567-e89b-12d3-a456-426614174000' \
-  -H 'accept: application/json'
-```
-
-**Responses**
-
-| Code | Description |
-| ---- | ----------- |
-| 200 | Successful Response |
-| 422 | Validation Error |
-
-# Authentication
-
-
-## Validate JSON Web Token
-
-**Summary:** Validate JSON Web Token
-
-### HTTP Request 
-`***POST*** /api_v2/authenticate/validatetoken` 
-
-
-```python
-import requests
-import json
-
-url = 'http://localhost/api_v2/authenticate/validatetoken'
-headers = {
-    'accept': 'application/json',
-    'Content-Type': 'application/json'
-}
-data = {
-    "sub": "string"
-}
-
-response = requests.post(url, headers=headers, data=json.dumps(data))
-print(response.json())
-
-```
-
-```java
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
-public class Main {
-    public static void main(String[] args) {
-        String url = "http://localhost/api_v2/authenticate/validatetoken";
-        String jsonInputString = "{\"sub\":\"string\"}";
-
-        try {
-            HttpURLConnection con = (HttpURLConnection) new URL(url).openConnection();
-            con.setRequestMethod("POST");
-            con.setRequestProperty("Accept", "application/json");
-            con.setRequestProperty("Content-Type", "application/json");
-            con.setDoOutput(true);
-
-            try (OutputStream os = con.getOutputStream()) {
-                byte[] input = jsonInputString.getBytes("utf-8");
-                os.write(input, 0, input.length);
-            }
-
-            int responseCode = con.getResponseCode();
-            System.out.println("Response Code: " + responseCode);
-            // You can add code to read the response here if needed.
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-}
-
-```
-
-```javascript
-const url = 'http://localhost/api_v2/authenticate/validatetoken';
-const data = {
-  sub: "string"
-};
-
-fetch(url, {
-  method: 'POST',
-  headers: {
-    'Accept': 'application/json',
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify(data)
-})
-  .then(response => {
-    if (!response.ok) {
-      throw new Error('Network response was not ok ' + response.statusText);
-    }
-    return response.json();
-  })
-  .then(data => console.log(data))
-  .catch(error => console.error('There was a problem with the fetch operation:', error));
-
-```
-
-```shell
-curl -X 'POST' \
-  'http://localhost/api_v2/authenticate/validatetoken' \
-  -H 'accept: application/json' \
-  -H 'Content-Type: application/json' \
-  -d '{
-  "sub": "string"
-}'
-```
-
-**Responses**
-
-| Code | Description |
-| ---- | ----------- |
-| 200 | Successful Response |
-| 422 | Validation Error |
-
-
-
-## Login using email and password
-
-
-**Summary:** Login using email and password
-
-### HTTP Request 
-`***POST*** /api_v2/authenticate/login` 
-
-**Responses**
-
-| Code | Description |
-| ---- | ----------- |
-| 200 | Successful Response |
-| 422 | Validation Error |
-
-```python
-import requests
-import json
-
-url = 'http://localhost/api_v2/authenticate/login'
-headers = {
-    'accept': 'application/json',
-    'Content-Type': 'application/json'
-}
-data = {
-    "email": "string",
-    "email_verified": False,
-    "given_name": "string",
-    "family_name": "string",
-    "picture": "string",
-    "id": "f7be2192-8182-11ef-8e17-0242ac130003",
-    "password": "string",
-    "is_superaccount": False
-}
-
-response = requests.post(url, headers=headers, data=json.dumps(data))
-print(response.json())
-
-```
-
-```java
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
-public class Main {
-    public static void main(String[] args) {
-        String url = "http://localhost/api_v2/authenticate/login";
-        String jsonInputString = "{\"email\":\"string\",\"email_verified\":false,\"given_name\":\"string\",\"family_name\":\"string\",\"picture\":\"string\",\"id\":\"f7be2192-8182-11ef-8e17-0242ac130003\",\"password\":\"string\",\"is_superaccount\":false}";
-
-        try {
-            HttpURLConnection con = (HttpURLConnection) new URL(url).openConnection();
-            con.setRequestMethod("POST");
-            con.setRequestProperty("Accept", "application/json");
-            con.setRequestProperty("Content-Type", "application/json");
-            con.setDoOutput(true);
-
-            try (OutputStream os = con.getOutputStream()) {
-                byte[] input = jsonInputString.getBytes("utf-8");
-                os.write(input, 0, input.length);
-            }
-
-            int responseCode = con.getResponseCode();
-            System.out.println("Response Code: " + responseCode);
-            // You can add code to read the response here if needed.
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-}
-
-```
-
-```javascript
-const url = 'http://localhost/api_v2/authenticate/login';
-const data = {
-  email: "string",
-  email_verified: false,
-  given_name: "string",
-  family_name: "string",
-  picture: "string",
-  id: "f7be2192-8182-11ef-8e17-0242ac130003",
-  password: "string",
-  is_superaccount: false
-};
-
-fetch(url, {
-  method: 'POST',
-  headers: {
-    'Accept': 'application/json',
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify(data)
-})
-  .then(response => {
-    if (!response.ok) {
-      throw new Error('Network response was not ok ' + response.statusText);
-    }
-    return response.json();
-  })
-  .then(data => console.log(data))
-  .catch(error => console.error('There was a problem with the fetch operation:', error));
-
-```
-
-```shell
-curl -X 'POST' \
-  'http://localhost/api_v2/authenticate/login' \
-  -H 'accept: application/json' \
-  -H 'Content-Type: application/json' \
-  -d '{
-  "email": "string",
-  "email_verified": false,
-  "given_name": "string",
-  "family_name": "string",
-  "picture": "string",
-  "id": "f7be2192-8182-11ef-8e17-0242ac130003",
-  "password": "string",
-  "is_superaccount": false
-}'
-```
-
-## Register A User 
-
-**Summary:** Register a user
-
-### HTTP Request 
-`***POST*** /api_v2/authenticate/create` 
-
-```python
-import requests
-import json
-
-url = 'http://localhost/api_v2/authenticate/create'
-headers = {
-    'accept': 'application/json',
-    'Content-Type': 'application/json'
-}
-data = {
-    "email": "string",
-    "email_verified": False,
-    "given_name": "string",
-    "family_name": "string",
-    "picture": "string",
-    "id": "f7be2192-8182-11ef-8e17-0242ac130003",
-    "password": "string",
-    "is_superaccount": False
-}
-
-response = requests.post(url, headers=headers, data=json.dumps(data))
-print(response.json())
-
-```
-
-```java
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
-public class Main {
-    public static void main(String[] args) {
-        String url = "http://localhost/api_v2/authenticate/create";
-        String jsonInputString = "{\"email\":\"string\",\"email_verified\":false,\"given_name\":\"string\",\"family_name\":\"string\",\"picture\":\"string\",\"id\":\"f7be2192-8182-11ef-8e17-0242ac130003\",\"password\":\"string\",\"is_superaccount\":false}";
-
-        try {
-            HttpURLConnection con = (HttpURLConnection) new URL(url).openConnection();
-            con.setRequestMethod("POST");
-            con.setRequestProperty("Accept", "application/json");
-            con.setRequestProperty("Content-Type", "application/json");
-            con.setDoOutput(true);
-
-            try (OutputStream os = con.getOutputStream()) {
-                byte[] input = jsonInputString.getBytes("utf-8");
-                os.write(input, 0, input.length);
-            }
-
-            int responseCode = con.getResponseCode();
-            System.out.println("Response Code: " + responseCode);
-            // You can add code to read the response here if needed.
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-}
-
-```
-
-```javascript
-const url = 'http://localhost/api_v2/authenticate/create';
-const data = {
-  email: "string",
-  email_verified: false,
-  given_name: "string",
-  family_name: "string",
-  picture: "string",
-  id: "f7be2192-8182-11ef-8e17-0242ac130003",
-  password: "string",
-  is_superaccount: false
-};
-
-fetch(url, {
-  method: 'POST',
-  headers: {
-    'Accept': 'application/json',
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify(data)
-})
-  .then(response => {
-    if (!response.ok) {
-      throw new Error('Network response was not ok ' + response.statusText);
-    }
-    return response.json();
-  })
-  .then(data => console.log(data))
-  .catch(error => console.error('There was a problem with the fetch operation:', error));
-
-```
-
-```shell
-curl -X 'POST' \
-  'http://localhost/api_v2/authenticate/create' \
-  -H 'accept: application/json' \
-  -H 'Content-Type: application/json' \
-  -d '{
-  "email": "string",
-  "email_verified": false,
-  "given_name": "string",
-  "family_name": "string",
-  "picture": "string",
-  "id": "f7be2192-8182-11ef-8e17-0242ac130003",
-  "password": "string",
-  "is_superaccount": false
-}'
-```
-
-**Responses**
-
-| Code | Description |
-| ---- | ----------- |
-| 200 | Successful Response |
-| 422 | Validation Error |
-
-# Document 
-## Get Doc Status 
-
-**Summary:** Get Siblings
-
-### HTTP Request 
-`***GET*** /api_v2/document/{doc_id}/check_doc_status` 
-
-```python
-import requests
-
-url = 'http://localhost/api_v2/document/30900a6b-ab58-4a3a-b2f8-2d7bd2cd38d0/check_doc_status?word_count=0'
-headers = {
-    'accept': 'application/json',
-    'Authorization': 'Bearer <auth-token>'
-}
-
-response = requests.get(url, headers=headers)
-print(response.status_code)
-print(response.json())
-
-```
-
-```java
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
-public class Main {
-    public static void main(String[] args) {
-        try {
-            String url = "http://localhost/api_v2/document/30900a6b-ab58-4a3a-b2f8-2d7bd2cd38d0/check_doc_status?word_count=0";
-            URL obj = new URL(url);
-            HttpURLConnection con = (HttpURLConnection) obj.openConnection();
-            con.setRequestMethod("GET");
-            con.setRequestProperty("Accept", "application/json");
-            con.setRequestProperty("Authorization", "Bearer <auth-token>");
-
-            int responseCode = con.getResponseCode();
-            System.out.println("Response Code: " + responseCode);
-
-            BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-            String inputLine;
-            StringBuffer response = new StringBuffer();
-
-            while ((inputLine = in.readLine()) != null) {
-                response.append(inputLine);
-            }
-            in.close();
-
-            System.out.println(response.toString());
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-}
-
-```
-
-```javascript
-const url = 'http://localhost/api_v2/document/30900a6b-ab58-4a3a-b2f8-2d7bd2cd38d0/check_doc_status?word_count=0';
-const headers = {
-  'Accept': 'application/json',
-  'Authorization': 'Bearer <auth-token>'
-};
-
-fetch(url, { method: 'GET', headers: headers })
-  .then(response => response.json())
-  .then(data => console.log(data))
-  .catch(error => console.error('Error:', error));
-
-```
-
-```shell
-curl -X 'GET' \
-  'http://localhost/api_v2/document/30900a6b-ab58-4a3a-b2f8-2d7bd2cd38d0/check_doc_status?word_count=0' \
-  -H 'accept: application/json' \
-  -H 'Authorization: Bearer <auth-token>'
-```
-
-**Parameters**
-
-| Name | Located in | Description | Required | Type |
-| ---- | ---------- | ----------- | -------- | ---- |
-| doc_id | path |  | Yes |  |
-| word_count | query |  | No |  |
-
-**Responses**
-
-| Code | Description |
-| ---- | ----------- |
-| 200 | Successful Response |
-| 422 | Validation Error |
-
-## Create Document
-
-**Summary:** Create Document
-
-### HTTP Request 
-`***POST*** /api_v2/document/port_file` 
-
-```python
-import requests
-
-url = 'http://localhost/api_v2/document/port_file?library_id=7650e878-ec84-44f0-b7b9-c068f67bb41b&doc_idx=2'
-headers = {
-    'accept': 'application/json',
-    'Authorization': 'Bearer <auth-token>'
-}
-
-response = requests.post(url, headers=headers)
-print(response.status_code)
-print(response.json())
-
-```
-
-```java
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
-public class Main {
-    public static void main(String[] args) {
-        String url = "http://localhost/api_v2/document/port_file?library_id=7650e878-ec84-44f0-b7b9-c068f67bb41b&doc_idx=2";
-
-        try {
-            HttpURLConnection con = (HttpURLConnection) new URL(url).openConnection();
-            con.setRequestMethod("POST");
-            con.setRequestProperty("Accept", "application/json");
-            con.setRequestProperty("Authorization", "Bearer <auth-token>");
-            con.setDoOutput(true);
-
-            int responseCode = con.getResponseCode();
-            System.out.println("Response Code: " + responseCode);
-
-            // You can add code here to read the response if necessary
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-}
-
-```
-
-```javascript
-const url = 'http://localhost/api_v2/document/port_file?library_id=7650e878-ec84-44f0-b7b9-c068f67bb41b&doc_idx=2';
-
-const headers = {
-  'Accept': 'application/json',
-  'Authorization': 'Bearer <auth-token>'
-};
-
-fetch(url, {
-  method: 'POST',
-  headers: headers
-})
-  .then(response => response.json())
-  .then(data => console.log(data))
-  .catch(error => console.error('Error:', error));
-
-```
-
-```shell
-curl -X 'POST' \
-  'http://localhost/api_v2/document/port_file?library_id=7650e878-ec84-44f0-b7b9-c068f67bb41b&doc_idx=2' \
-  -H 'accept: application/json' \
-  -H 'Authorization: Bearer <auth-token>' \
-  -d ''
-```
-
-**Parameters**
-
-| Name | Located in | Description | Required | Type |
-| ---- | ---------- | ----------- | -------- | ---- |
-| library_id | query |  | Yes |  |
-| doc_idx | query |  | Yes |  |
-
-**Responses**
-
-| Code | Description |
-| ---- | ----------- |
-| 201 | Successful Response |
-| 422 | Validation Error |
-
-## Get Document
-
-**Summary:** Get Document
-
-### HTTP Request 
-`***GET*** /api_v2/document/{doc_id}` 
-
-**Parameters**
-
-| Name | Located in | Description | Required | Type |
-| ---- | ---------- | ----------- | -------- | ---- |
-| doc_id | path |  | Yes |  |
-
-```python
-import requests
-
-url = 'http://localhost/api_v2/document/7650e878-ec84-44f0-b7b9-c068f67bb41b'
-headers = {
-    'accept': 'application/json',
-    'Authorization': 'Bearer <auth-token>'
-}
-
-response = requests.get(url, headers=headers)
-print(response.status_code)
-print(response.json())
-
-```
-
-```java
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
-public class Main {
-    public static void main(String[] args) {
-        String url = "http://localhost/api_v2/document/7650e878-ec84-44f0-b7b9-c068f67bb41b";
-
-        try {
-            HttpURLConnection con = (HttpURLConnection) new URL(url).openConnection();
-            con.setRequestMethod("GET");
-            con.setRequestProperty("Accept", "application/json");
-            con.setRequestProperty("Authorization", "Bearer <auth-token>");
-
-            int responseCode = con.getResponseCode();
-            System.out.println("Response Code: " + responseCode);
-
-            BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-            String inputLine;
-            StringBuilder content = new StringBuilder();
-
-            while ((inputLine = in.readLine()) != null) {
-                content.append(inputLine);
-            }
-
-            // Close connections
-            in.close();
-            con.disconnect();
-
-            // Print result
-            System.out.println(content.toString());
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-}
-
-
-```
-
-```javascript
-const url = 'http://localhost/api_v2/document/7650e878-ec84-44f0-b7b9-c068f67bb41b';
-
-const headers = {
-  'Accept': 'application/json',
-  'Authorization': 'Bearer <auth-token>'
-};
-
-fetch(url, {
-  method: 'GET',
-  headers: headers
-})
-  .then(response => response.json())
-  .then(data => console.log(data))
-  .catch(error => console.error('Error:', error));
-
-```
-
-```shell
-curl -X 'GET' \
-  'http://localhost/api_v2/document/7650e878-ec84-44f0-b7b9-c068f67bb41b' \
-  -H 'accept: application/json' \
-  -H 'Authorization: Bearer <auth-token>'
-
-```
-
-**Responses**
-
-| Code | Description |
-| ---- | ----------- |
-| 200 | Successful Response |
-| 422 | Validation Error |
-
-## Delete Document
-
-**Summary:** Delete Document
-
-### HTTP Request 
-`***DELETE*** /api_v2/document/{doc_id}/delete` 
-
-**Parameters**
-
-| Name | Located in | Description | Required | Type |
-| ---- | ---------- | ----------- | -------- | ---- |
-| doc_id | path |  | Yes |  |
-
-```python
-import requests
-
-url = 'http://localhost/api_v2/document/7650e878-ec84-44f0-b7b9-c068f67bb41b/delete'
-headers = {
-    'accept': 'application/json',
-    'Authorization': 'Bearer <auth-token>'
-}
-
-response = requests.delete(url, headers=headers)
-print(response.status_code)
-print(response.text)  # If needed, print the response body
-
-```
-
-```java
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
-public class Main {
-    public static void main(String[] args) {
-        String url = "http://localhost/api_v2/document/7650e878-ec84-44f0-b7b9-c068f67bb41b/delete";
-
-        try {
-            HttpURLConnection con = (HttpURLConnection) new URL(url).openConnection();
-            con.setRequestMethod("DELETE");
-            con.setRequestProperty("Accept", "application/json");
-            con.setRequestProperty("Authorization", "Bearer <auth-token>");
-
-            int responseCode = con.getResponseCode();
-            System.out.println("Response Code: " + responseCode);
-
-            BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-            String inputLine;
-            StringBuilder content = new StringBuilder();
-
-            while ((inputLine = in.readLine()) != null) {
-                content.append(inputLine);
-            }
-
-            // Close connections
-            in.close();
-            con.disconnect();
-
-            // Print result
-            System.out.println(content.toString());
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-}
-
-```
-
-```javascript
-const url = 'http://localhost/api_v2/document/7650e878-ec84-44f0-b7b9-c068f67bb41b/delete';
-
-const headers = {
-  'Accept': 'application/json',
-  'Authorization': 'Bearer <auth-token>'
-};
-
-fetch(url, {
-  method: 'DELETE',
-  headers: headers
-})
-  .then(response => {
-    console.log('Response Code:', response.status);
-    return response.text();  // If you need to print the response body
-  })
-  .then(data => console.log(data))
-  .catch(error => console.error('Error:', error));
-
-```
-
-```shell
-curl -X 'DELETE' \
-  'http://localhost/api_v2/document/7650e878-ec84-44f0-b7b9-c068f67bb41b/delete' \
-  -H 'accept: application/json' \
-  -H 'Authorization: Bearer <auth-token>'
-
-```
-
-**Responses**
-
-| Code | Description |
-| ---- | ----------- |
-| 200 | Successful Response |
-| 422 | Validation Error |
-
-## Process Document
-
-**Summary:** Process Document
-
-### HTTP Request 
-`***POST*** /api_v2/document/{doc_id}/process` 
-
-**Parameters**
-
-| Name | Located in | Description | Required | Type |
-| ---- | ---------- | ----------- | -------- | ---- |
-| doc_id | path |  | Yes |  |
-| name | query |  | No |  |
-| status | query |  | No |  |
-
-```python
-import requests
-
-url = 'http://localhost/api_v2/document/7650e878-ec84-44f0-b7b9-c068f67bb41b/process?name=name&status=status'
-headers = {
-    'accept': 'application/json',
-    'Authorization': 'Bearer <auth-token>'
-}
-
-response = requests.post(url, headers=headers)
-print(response.status_code)
-print(response.text)  # If needed, print the response body
-
-```
-
-```java
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
-public class Main {
-    public static void main(String[] args) {
-        String url = "http://localhost/api_v2/document/7650e878-ec84-44f0-b7b9-c068f67bb41b/process?name=name&status=status";
-
-        try {
-            HttpURLConnection con = (HttpURLConnection) new URL(url).openConnection();
-            con.setRequestMethod("POST");
-            con.setRequestProperty("Accept", "application/json");
-            con.setRequestProperty("Authorization", "Bearer <auth-token>");
-
-            int responseCode = con.getResponseCode();
-            System.out.println("Response Code: " + responseCode);
-
-            BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-            String inputLine;
-            StringBuilder content = new StringBuilder();
-
-            while ((inputLine = in.readLine()) != null) {
-                content.append(inputLine);
-            }
-
-            // Close connections
-            in.close();
-            con.disconnect();
-
-            // Print result
-            System.out.println(content.toString());
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-}
-
-```
-
-```javascript
-const url = 'http://localhost/api_v2/document/7650e878-ec84-44f0-b7b9-c068f67bb41b/process?name=name&status=status';
-
-const headers = {
-  'Accept': 'application/json',
-  'Authorization': 'Bearer <auth-token>'
-};
-
-fetch(url, {
-  method: 'POST',
-  headers: headers
-})
-  .then(response => {
-    console.log('Response Code:', response.status);
-    return response.text();  // If you need to print the response body
-  })
-  .then(data => console.log(data))
-  .catch(error => console.error('Error:', error));
-
-```
-
-```shell
-curl -X 'POST' \
-  'http://localhost/api_v2/document/7650e878-ec84-44f0-b7b9-c068f67bb41b/process?name=name&status=status' \
-  -H 'accept: application/json' \
-  -H 'Authorization: Bearer <auth-token>' \
-  -d ''
-```
-
-**Responses**
-
-| Code | Description |
-| ---- | ----------- |
-| 200 | Successful Response |
-| 422 | Validation Error |
-
-## Update Document
-
-**Summary:** Update Document
-
-### HTTP Request 
-`***POST*** /api_v2/document/{doc_id}/update` 
-
-**Parameters**
-
-| Name | Located in | Description | Required | Type |
-| ---- | ---------- | ----------- | -------- | ---- |
-| doc_id | path |  | Yes |  |
-| name | query |  | Yes |  |
-
-```python
-import requests
-
-url = 'http://localhost/api_v2/document/7650e878-ec84-44f0-b7b9-c068f67bb41b/update?name=name'
-headers = {
-    'accept': 'application/json',
-    'Authorization': 'Bearer <auth-token>'
-}
-
-response = requests.post(url, headers=headers)
-print(response.status_code)
-print(response.text)  # If needed, print the response body
-```
-
-```java
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
-public class Main {
-    public static void main(String[] args) {
-        String url = "http://localhost/api_v2/document/7650e878-ec84-44f0-b7b9-c068f67bb41b/update?name=name";
-
-        try {
-            HttpURLConnection con = (HttpURLConnection) new URL(url).openConnection();
-            con.setRequestMethod("POST");
-            con.setRequestProperty("Accept", "application/json");
-            con.setRequestProperty("Authorization", "Bearer <auth-token>");
-
-            int responseCode = con.getResponseCode();
-            System.out.println("Response Code: " + responseCode);
-
-            BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-            String inputLine;
-            StringBuilder content = new StringBuilder();
-
-            while ((inputLine = in.readLine()) != null) {
-                content.append(inputLine);
-            }
-
-            // Close connections
-            in.close();
-            con.disconnect();
-
-            // Print result
-            System.out.println(content.toString());
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-}
-
-```
-
-```javascript
-const url = 'http://localhost/api_v2/document/7650e878-ec84-44f0-b7b9-c068f67bb41b/update?name=name';
-
-const headers = {
-  'Accept': 'application/json',
-  'Authorization': 'Bearer <auth-token>'
-};
-
-fetch(url, {
-  method: 'POST',
-  headers: headers
-})
-  .then(response => {
-    console.log('Response Code:', response.status);
-    return response.text();  // If you need to print the response body
-  })
-  .then(data => console.log(data))
-  .catch(error => console.error('Error:', error));
-
-```
-
-```shell
-curl -X 'POST' \
-  'http://localhost/api_v2/document/7650e878-ec84-44f0-b7b9-c068f67bb41b/update?name=name' \
-  -H 'accept: application/json' \
-  -H 'Authorization: Bearer <auth-token>' \
-  -d ''
-
-```
-
-**Responses**
-
-| Code | Description |
-| ---- | ----------- |
-| 200 | Successful Response |
-| 422 | Validation Error |
-
-## Get Document
-
-**Summary:** Get Document
-
-### HTTP Request 
-`***GET*** /api_v2/document/{doc_id}/page` 
-
-**Parameters**
-
-| Name | Located in | Description | Required | Type |
-| ---- | ---------- | ----------- | -------- | ---- |
-| doc_id | path |  | Yes |  |
-| page | query |  | No |  |
-| answer_id | query |  | No |  |
-
-```python
-import requests
-
-url = 'http://localhost/api_v2/document/7650e878-ec84-44f0-b7b9-c068f67bb41b/page?page=3&answer_id=7650e878-ec84-44f0-b7b9-c068f67bb41b'
-headers = {
-    'accept': '*/*',
-    'Authorization': 'Bearer <auth-token>'
-}
-
-response = requests.get(url, headers=headers)
-print(response.status_code)
-print(response.text)  # If needed, print the response body
-
-```
-
-```java
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
-public class Main {
-    public static void main(String[] args) {
-        String url = "http://localhost/api_v2/document/7650e878-ec84-44f0-b7b9-c068f67bb41b/page?page=3&answer_id=7650e878-ec84-44f0-b7b9-c068f67bb41b";
-
-        try {
-            HttpURLConnection con = (HttpURLConnection) new URL(url).openConnection();
-            con.setRequestMethod("GET");
-            con.setRequestProperty("Accept", "*/*");
-            con.setRequestProperty("Authorization", "Bearer <auth-token>");
-
-            int responseCode = con.getResponseCode();
-            System.out.println("Response Code: " + responseCode);
-
-            BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-            String inputLine;
-            StringBuilder content = new StringBuilder();
-
-            while ((inputLine = in.readLine()) != null) {
-                content.append(inputLine);
-            }
-
-            // Close connections
-            in.close();
-            con.disconnect();
-
-            // Print result
-            System.out.println(content.toString());
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-}
-
-```
-
-```javascript
-const url = 'http://localhost/api_v2/document/7650e878-ec84-44f0-b7b9-c068f67bb41b/page?page=3&answer_id=7650e878-ec84-44f0-b7b9-c068f67bb41b';
-
-const headers = {
-  'Accept': '*/*',
-  'Authorization': 'Bearer <auth-token>'
-};
-
-fetch(url, {
-  method: 'GET',
-  headers: headers
-})
-  .then(response => {
-    console.log('Response Code:', response.status);
-    return response.text();  // If you need to print the response body
-  })
-  .then(data => console.log(data))
-  .catch(error => console.error('Error:', error));
-
-```
-
-```shell
-curl -X 'GET' \
-  'http://localhost/api_v2/document/7650e878-ec84-44f0-b7b9-c068f67bb41b/page?page=3&answer_id=7650e878-ec84-44f0-b7b9-c068f67bb41b' \
-  -H 'accept: */*' \
-  -H 'Authorization: Bearer <auth-token>'
-
-```
-
-**Responses**
-
-| Code | Description |
-| ---- | ----------- |
-| 200 | Successful Response |
-| 422 | Validation Error |
-
-## Get Pending Invitations
-
-**Summary:** Get Pending Invitations
-
-### HTTP Request 
-`***GET*** /api_v2/notification/pending_invitations` 
-
-**Responses**
-
-| Code | Description |
-| ---- | ----------- |
-| 200 | Successful Response |
-
-```python
-import requests
-
-url = 'http://localhost/api_v2/notification/pending_invitations'
-headers = {
-    'accept': 'application/json',
-    'Authorization': 'Bearer <auth-token>'
-}
-
-response = requests.get(url, headers=headers)
-print(response.status_code)
-print(response.json())  # If you want to print the JSON response
-
-```
-
-```java
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
-public class Main {
-    public static void main(String[] args) {
-        String url = "http://localhost/api_v2/notification/pending_invitations";
-
-        try {
-            HttpURLConnection con = (HttpURLConnection) new URL(url).openConnection();
-            con.setRequestMethod("GET");
-            con.setRequestProperty("Accept", "application/json");
-            con.setRequestProperty("Authorization", "Bearer <auth-token>");
-
-            int responseCode = con.getResponseCode();
-            System.out.println("Response Code: " + responseCode);
-
-            BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-            String inputLine;
-            StringBuilder content = new StringBuilder();
-
-            while ((inputLine = in.readLine()) != null) {
-                content.append(inputLine);
-            }
-
-            // Close connections
-            in.close();
-            con.disconnect();
-
-            // Print result
-            System.out.println(content.toString());
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-}
-
-```
-
-```javascript
-const url = 'http://localhost/api_v2/notification/pending_invitations';
-
-const headers = {
-  'Accept': 'application/json',
-  'Authorization': 'Bearer <auth-token>'
-};
-
-fetch(url, {
-  method: 'GET',
-  headers: headers
-})
-  .then(response => {
-    console.log('Response Code:', response.status);
-    return response.json();  // If you want to parse the JSON response
-  })
-  .then(data => console.log(data))
-  .catch(error => console.error('Error:', error));
-
-```
-
-```shell
-curl -X 'GET' \
-  'http://localhost/api_v2/notification/pending_invitations' \
-  -H 'accept: application/json' \
-  -H 'Authorization: Bearer <auth-token>'
-
-```
-
-# Subscription
-
-## Read Subscriptions 
-
-**Summary:** Read Subscriptions
-
-**Description:** Retrieve subscriptions.
-
-### HTTP Request 
-`***GET*** /api_v2/subscription/` 
-
-**Parameters**
-
-| Name | Located in | Description | Required | Type |
-| ---- | ---------- | ----------- | -------- | ---- |
-| skip | query |  | No |  |
-| limit | query |  | No |  |
-
-```python
-import requests
-
-url = 'http://localhost/api_v2/subscription/?skip=0&limit=10'
-headers = {
-    'accept': 'application/json',
-    'Authorization': 'Bearer <auth-token>'
-}
-
-response = requests.get(url, headers=headers)
-print(response.status_code)
-print(response.json())  # If you want to print the JSON response
-
-```
-
-```java
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
-public class Main {
-    public static void main(String[] args) {
-        String url = "http://localhost/api_v2/subscription/?skip=0&limit=10";
-
-        try {
-            HttpURLConnection con = (HttpURLConnection) new URL(url).openConnection();
-            con.setRequestMethod("GET");
-            con.setRequestProperty("Accept", "application/json");
-            con.setRequestProperty("Authorization", "Bearer <auth-token>");
-
-            int responseCode = con.getResponseCode();
-            System.out.println("Response Code: " + responseCode);
-
-            BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-            String inputLine;
-            StringBuilder content = new StringBuilder();
-
-            while ((inputLine = in.readLine()) != null) {
-                content.append(inputLine);
-            }
-
-            // Close connections
-            in.close();
-            con.disconnect();
-
-            // Print result
-            System.out.println(content.toString());
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-}
-
-```
-
-```javascript
-const url = 'http://localhost/api_v2/subscription/?skip=0&limit=10';
-
-const headers = {
-  'Accept': 'application/json',
-  'Authorization': 'Bearer <auth-token>'
-};
-
-fetch(url, {
-  method: 'GET',
-  headers: headers
-})
-  .then(response => {
-    console.log('Response Code:', response.status);
-    return response.json();  // If you want to parse the JSON response
-  })
-  .then(data => console.log(data))
-  .catch(error => console.error('Error:', error));
-
-```
-
-```shell
-curl -X 'GET' \
-  'http://localhost/api_v2/subscription/?skip=0&limit=10' \
-  -H 'accept: application/json' \
-  -H 'Authorization: Bearer <auth-token>'
-
-```
-
-**Responses**
-
-| Code | Description |
-| ---- | ----------- |
-| 200 | Successful Response |
-| 422 | Validation Error |
-
-## Create Subscription 
-
-**Summary:** Create Subscription
-
-**Description:** Create new subscription.
-
-### HTTP Request 
-`***POST*** /api_v2/subscription/` 
-
-**Responses**
-
-| Code | Description |
-| ---- | ----------- |
-| 200 | Successful Response |
-| 422 | Validation Error |
-
-```python
-import requests
-import json
-
-url = 'http://localhost/api_v2/subscription/'
-headers = {
-    'accept': 'application/json',
-    'Authorization': 'Bearer <auth-token>',
-    'Content-Type': 'application/json'
-}
-
-data = {
-    "name": "string",
-    "description": "string",
-    "total_token_limit": 0,
-    "allowed_questions_per_day": 0,
-    "max_users": 0,
-    "library_limit": 0,
-    "price": 0,
-    "additional_user_price": 0,
-    "additional_user_questions_per_day": 0,
-    "slug": "string"
-}
-
-response = requests.post(url, headers=headers, json=data)
-print(response.status_code)
-print(response.json())  # If you want to print the JSON response
-
-```
-
-```java
-import java.io.BufferedReader;
-import java.io.OutputStream;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
-public class Main {
-    public static void main(String[] args) {
-        String url = "http://localhost/api_v2/subscription/";
-        String jsonInputString = "{ \"name\": \"string\", \"description\": \"string\", \"total_token_limit\": 0, \"allowed_questions_per_day\": 0, \"max_users\": 0, \"library_limit\": 0, \"price\": 0, \"additional_user_price\": 0, \"additional_user_questions_per_day\": 0, \"slug\": \"string\" }";
-
-        try {
-            HttpURLConnection con = (HttpURLConnection) new URL(url).openConnection();
-            con.setRequestMethod("POST");
-            con.setRequestProperty("Accept", "application/json");
-            con.setRequestProperty("Authorization", "Bearer <auth-token>");
-            con.setRequestProperty("Content-Type", "application/json");
-            con.setDoOutput(true);
-
-            try (OutputStream os = con.getOutputStream()) {
-                byte[] input = jsonInputString.getBytes("utf-8");
-                os.write(input, 0, input.length);
-            }
-
-            int responseCode = con.getResponseCode();
-            System.out.println("Response Code: " + responseCode);
-
-            BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-            String inputLine;
-            StringBuilder content = new StringBuilder();
-
-            while ((inputLine = in.readLine()) != null) {
-                content.append(inputLine);
-            }
-
-            // Close connections
-            in.close();
-            con.disconnect();
-
-            // Print result
-            System.out.println(content.toString());
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-}
-
-```
-
-```javascript
-const url = 'http://localhost/api_v2/subscription/';
-
-const headers = {
-  'Accept': 'application/json',
-  'Authorization': 'Bearer <auth-token>',
-  'Content-Type': 'application/json'
-};
-
-const data = {
-  "name": "string",
-  "description": "string",
-  "total_token_limit": 0,
-  "allowed_questions_per_day": 0,
-  "max_users": 0,
-  "library_limit": 0,
-  "price": 0,
-  "additional_user_price": 0,
-  "additional_user_questions_per_day": 0,
-  "slug": "string"
-};
-
-fetch(url, {
-  method: 'POST',
-  headers: headers,
-  body: JSON.stringify(data)
-})
-  .then(response => {
-    console.log('Response Code:', response.status);
-    return response.json();  // If you want to parse the JSON response
-  })
-  .then(data => console.log(data))
-  .catch(error => console.error('Error:', error));
-
-```
-
-```shell
-curl -X 'POST' \
-  'http://localhost/api_v2/subscription/' \
-  -H 'accept: application/json' \
-  -H 'Authorization: <auth-token>' \
-  -H 'Content-Type: application/json' \
-  -d '{
-  "name": "string", 
-  "description": "string",
-  "total_token_limit": 0,
-  "allowed_questions_per_day": 0,
-  "max_users": 0,
-  "library_limit": 0,
-  "price": 0,
-  "additional_user_price": 0,
-  "additional_user_questions_per_day": 0,
-  "slug": "string"
-}'
-```
-
-## Read Subscription By Workspace ID 
-
-**Summary:** Read Subscriptions By Workspace Id
-
-**Description:** Retrieve subscriptions by workspace_id.
-
-### HTTP Request 
-`***GET*** /api_v2/subscription/{workspace_id}` 
-
-**Parameters**
-
-| Name | Located in | Description | Required | Type |
-| ---- | ---------- | ----------- | -------- | ---- |
-| workspace_id | path |  | Yes |  |
-| active | query |  | No |  |
-
-```python
-import requests
-
-url = 'http://localhost/api_v2/subscription/7650e878-ec84-44f0-b7b9-c068f67bb41b?active=%3Cactive%3E'
-headers = {
-    'accept': 'application/json',
-    'Authorization': 'Bearer <auth-token>'
-}
-
-response = requests.get(url, headers=headers)
-print(response.status_code)
-print(response.json())  # If you want to print the JSON
-
-```
-
-```java
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
-public class Main {
-    public static void main(String[] args) {
-        String url = "http://localhost/api_v2/subscription/7650e878-ec84-44f0-b7b9-c068f67bb41b?active=%3Cactive%3E";
-
-        try {
-            HttpURLConnection con = (HttpURLConnection) new URL(url).openConnection();
-            con.setRequestMethod("GET");
-            con.setRequestProperty("Accept", "application/json");
-            con.setRequestProperty("Authorization", "Bearer <auth-token>");
-
-            int responseCode = con.getResponseCode();
-            System.out.println("Response Code: " + responseCode);
-
-            BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-            String inputLine;
-            StringBuilder content = new StringBuilder();
-
-            while ((inputLine = in.readLine()) != null) {
-                content.append(inputLine);
-            }
-
-            // Close connections
-            in.close();
-            con.disconnect();
-
-            // Print result
-            System.out.println(content.toString());
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-}
-
-```
-
-```javascript
-const url = 'http://localhost/api_v2/subscription/7650e878-ec84-44f0-b7b9-c068f67bb41b?active=%3Cactive%3E';
-
-const headers = {
-  'Accept': 'application/json',
-  'Authorization': 'Bearer <auth-token>'
-};
-
-fetch(url, {
-  method: 'GET',
-  headers: headers
-})
-  .then(response => {
-    console.log('Response Code:', response.status);
-    return response.json();  // If you want to parse the JSON response
-  })
-  .then(data => console.log(data))
-  .catch(error => console.error('Error:', error));
-
-```
-
-```shell
-curl -X 'GET' \
-  'http://localhost/api_v2/subscription/7650e878-ec84-44f0-b7b9-c068f67bb41b?active=%3Cactive%3E' \
-  -H 'accept: application/json' \
-  -H 'Authorization: Bearer <auth-token>'
-
-```
-
-**Responses**
-
-| Code | Description |
-| ---- | ----------- |
-| 200 | Successful Response |
-| 422 | Validation Error |
-
-## Get Subscription Stats By Workspace ID 
-
-**Summary:** Get Subscription Stats
-
-**Description:** Retrieve subscription stats by workspace_id.
-
-### HTTP Request 
-`***GET*** /api_v2/subscription/stats/{workspace_id}` 
-
-**Parameters**
-
-| Name | Located in | Description | Required | Type |
-| ---- | ---------- | ----------- | -------- | ---- |
-| workspace_id | path |  | Yes |  |
-
-```python
-import requests
-
-url = 'http://localhost/api_v2/subscription/stats/7650e878-ec84-44f0-b7b9-c068f67bb41b'
-headers = {
-    'accept': 'application/json',
-    'Authorization': 'Bearer <auth-token>'
-}
-
-response = requests.get(url, headers=headers)
-print(response.status_code)
-print(response.json())  # If you want to print the JSON response
-
-```
-
-```java
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
-public class Main {
-    public static void main(String[] args) {
-        String url = "http://localhost/api_v2/subscription/stats/7650e878-ec84-44f0-b7b9-c068f67bb41b";
-
-        try {
-            HttpURLConnection con = (HttpURLConnection) new URL(url).openConnection();
-            con.setRequestMethod("GET");
-            con.setRequestProperty("Accept", "application/json");
-            con.setRequestProperty("Authorization", "Bearer <auth-token>");
-
-            int responseCode = con.getResponseCode();
-            System.out.println("Response Code: " + responseCode);
-
-            BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-            String inputLine;
-            StringBuilder content = new StringBuilder();
-
-            while ((inputLine = in.readLine()) != null) {
-                content.append(inputLine);
-            }
-
-            // Close connections
-            in.close();
-            con.disconnect();
-
-            // Print result
-            System.out.println(content.toString());
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-}
-
-```
-
-```javascript
-const url = 'http://localhost/api_v2/subscription/stats/7650e878-ec84-44f0-b7b9-c068f67bb41b';
-
-const headers = {
-  'Accept': 'application/json',
-  'Authorization': 'Bearer <auth-token>'
-};
-
-fetch(url, {
-  method: 'GET',
-  headers: headers
-})
-  .then(response => {
-    console.log('Response Code:', response.status);
-    return response.json();  // If you want to parse the JSON response
-  })
-  .then(data => console.log(data))
-  .catch(error => console.error('Error:', error));
-
-```
-
-```shell
-curl -X 'GET' \
-  'http://localhost/api_v2/subscription/stats/7650e878-ec84-44f0-b7b9-c068f67bb41b' \
-  -H 'accept: application/json' \
-  -H 'Authorization: Bearer <auth-token>'
-
-```
-
-**Responses**
-
-| Code | Description |
-| ---- | ----------- |
-| 200 | Successful Response |
-| 422 | Validation Error |
-
-# Payment
-## Create an Order
-
-
-**Summary:** Create Order
-
-### HTTP Request 
-`***POST*** /api_v2/payment/workspace/create_order` 
-
-**Responses**
-
-| Code | Description |
-| ---- | ----------- |
-| 200 | Successful Response |
-| 422 | Validation Error |
-
-```python
-import requests
-
-url = 'http://localhost/api_v2/payment/workspace/create_order'
-headers = {
-    'accept': 'application/json',
-    'Authorization': 'Bearer <auth-token>',
-    'Content-Type': 'application/json'
-}
-data = {
-    "name": "string",
-    "max_threshold": -1,
-    "is_public": False,
-    "is_default": False,
-    "subscription_slug": "free_tier"
-}
-
-response = requests.post(url, headers=headers, json=data)
-print(response.status_code)
-print(response.json())  # Print the JSON response
-
-```
-
-```java
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
-public class Main {
-    public static void main(String[] args) {
-        String url = "http://localhost/api_v2/payment/workspace/create_order";
-
-        try {
-            HttpURLConnection con = (HttpURLConnection) new URL(url).openConnection();
-            con.setRequestMethod("POST");
-            con.setRequestProperty("Accept", "application/json");
-            con.setRequestProperty("Authorization", "Bearer <auth-token>");
-            con.setRequestProperty("Content-Type", "application/json");
-            con.setDoOutput(true);
-
-            String jsonInputString = "{ \"name\": \"string\", \"max_threshold\": -1, \"is_public\": false, \"is_default\": false, \"subscription_slug\": \"free_tier\" }";
-
-            try (OutputStream os = con.getOutputStream()) {
-                byte[] input = jsonInputString.getBytes("utf-8");
-                os.write(input, 0, input.length);
-            }
-
-            int responseCode = con.getResponseCode();
-            System.out.println("Response Code: " + responseCode);
-
-            // Handle the response
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-}
-
-```
-
-```javascript
-const url = 'http://localhost/api_v2/payment/workspace/create_order';
-
-const headers = {
-  'Accept': 'application/json',
-  'Authorization': 'Bearer <auth-token>',
-  'Content-Type': 'application/json'
-};
-
-const data = {
-  "name": "string",
-  "max_threshold": -1,
-  "is_public": false,
-  "is_default": false,
-  "subscription_slug": "free_tier"
-};
-
-fetch(url, {
-  method: 'POST',
-  headers: headers,
-  body: JSON.stringify(data)
-})
-  .then(response => {
-    console.log('Response Code:', response.status);
-    return response.json();
-  })
-  .then(data => console.log(data))
-  .catch(error => console.error('Error:', error));
-
-```
-
-```shell
-curl -X 'POST' \
-  'http://localhost/api_v2/payment/workspace/create_order' \
-  -H 'accept: application/json' \
-  -H 'Authorization: Bearer <auth-token>' \
-  -H 'Content-Type: application/json' \
-  -d '{
-  "name": "string",
-  "max_threshold": -1,
-  "is_public": false,
-  "is_default": false,
-  "subscription_slug": "free_tier"
-}'
-
-```
-
-## Verify A Payment
-
-**Summary:** Verify Payment
-
-### HTTP Request 
-`***POST*** /api_v2/payment/workspace/verify_payment` 
-
-```python
-import requests
-
-url = 'http://localhost/api_v2/payment/workspace/verify_payment'
-headers = {
-    'accept': 'application/json',
-    'Authorization': 'Bearer <auth-token>',
-    'Content-Type': 'application/json'
-}
-data = {
-    "razorpay_order_id": "string",
-    "razorpay_payment_id": "string",
-    "razorpay_signature": "string",
-    "workspace": {
-        "name": "string",
-        "max_threshold": -1,
-        "is_public": False,
-        "is_default": False,
-        "subscription_slug": "free_tier"
-    }
-}
-
-response = requests.post(url, headers=headers, json=data)
-print(response.status_code)
-print(response.json())  # Print the JSON response
-
-```
-
-```java
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
-public class Main {
-    public static void main(String[] args) {
-        String url = "http://localhost/api_v2/payment/workspace/verify_payment";
-
-        try {
-            HttpURLConnection con = (HttpURLConnection) new URL(url).openConnection();
-            con.setRequestMethod("POST");
-            con.setRequestProperty("Accept", "application/json");
-            con.setRequestProperty("Authorization", "Bearer <auth-token>");
-            con.setRequestProperty("Content-Type", "application/json");
-            con.setDoOutput(true);
-
-            String jsonInputString = "{ \"razorpay_order_id\": \"string\", \"razorpay_payment_id\": \"string\", \"razorpay_signature\": \"string\", \"workspace\": { \"name\": \"string\", \"max_threshold\": -1, \"is_public\": false, \"is_default\": false, \"subscription_slug\": \"free_tier\" } }";
-
-            try (OutputStream os = con.getOutputStream()) {
-                byte[] input = jsonInputString.getBytes("utf-8");
-                os.write(input, 0, input.length);
-            }
-
-            int responseCode = con.getResponseCode();
-            System.out.println("Response Code: " + responseCode);
-
-            // Handle the response
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-}
-
-```
-
-```javascript
-const url = 'http://localhost/api_v2/payment/workspace/verify_payment';
-
-const headers = {
-  'Accept': 'application/json',
-  'Authorization': 'Bearer <auth-token>',
-  'Content-Type': 'application/json'
-};
-
-const data = {
-  "razorpay_order_id": "string",
-  "razorpay_payment_id": "string",
-  "razorpay_signature": "string",
-  "workspace": {
-    "name": "string",
-    "max_threshold": -1,
-    "is_public": false,
-    "is_default": false,
-    "subscription_slug": "free_tier"
-  }
-};
-
-fetch(url, {
-  method: 'POST',
-  headers: headers,
-  body: JSON.stringify(data)
-})
-  .then(response => {
-    console.log('Response Code:', response.status);
-    return response.json();
-  })
-  .then(data => console.log(data))
-  .catch(error => console.error('Error:', error));
-
-```
-
-```shell
-curl -X 'POST' \
-  'http://localhost/api_v2/payment/workspace/verify_payment' \
-  -H 'accept: application/json' \
-  -H 'Authorization: Bearer <auth-token>' \
-  -H 'Content-Type: application/json' \
-  -d '{
-  "razorpay_order_id": "string",
-  "razorpay_payment_id": "string",
-  "razorpay_signature": "string",
-  "workspace": {
-    "name": "string",
-    "max_threshold": -1,
-    "is_public": false,
-    "is_default": false,
-    "subscription_slug": "free_tier"
-  }
-}'
-
-```
-
-
-
-**Responses**
-
-| Code | Description |
-| ---- | ----------- |
-| 200 | Successful Response |
 | 422 | Validation Error |
 
